@@ -256,22 +256,39 @@ class RFIDReader:
 
 
 class CompetenciaManager:
-    """Gestiona el orden de llegada de nadadores"""
-    
+    """Gestiona el orden de llegada de nadadores. El punto cero (inicio de carrera) se define con iniciar_carrera()."""
+
     def __init__(self):
         self.llegadas: List[Tuple[int, RFIDTag]] = []  # (posición, tag)
         self.tags_registrados = set()  # EPCs ya registrados
         self.posicion_actual = 1
-    
+        self.hora_inicio: Optional[datetime] = None  # Punto cero; None = no definido
+
+    def iniciar_carrera(self):
+        """Define el punto cero: desde este momento se calcula el tiempo de carrera de cada nadador."""
+        self.hora_inicio = datetime.now()
+        print(f"⏱ Punto cero fijado: {self.hora_inicio.strftime('%H:%M:%S.%f')[:-3]}\n")
+
+    def _tiempo_carrera(self, tag: RFIDTag) -> Optional[float]:
+        """Segundos desde hora_inicio hasta el tag. None si no hay punto cero."""
+        if self.hora_inicio is None:
+            return None
+        return (tag.timestamp - self.hora_inicio).total_seconds()
+
     def registrar_llegada(self, tag: RFIDTag):
         """Registra la llegada de un nadador (solo primera detección)"""
         if tag.epc not in self.tags_registrados:
             self.llegadas.append((self.posicion_actual, tag))
             self.tags_registrados.add(tag.epc)
-            
-            print(f"🥇 POSICIÓN {self.posicion_actual}: EPC={tag.epc} | Antena={tag.antenna} | {tag.timestamp.strftime('%H:%M:%S.%f')[:-3]}")
+
+            tiempo_str = tag.timestamp.strftime('%H:%M:%S.%f')[:-3]
+            elapsed = self._tiempo_carrera(tag)
+            if elapsed is not None:
+                print(f"🥇 POSICIÓN {self.posicion_actual}: EPC={tag.epc} | Antena={tag.antenna} | Llegada: {tiempo_str} | Tiempo carrera: {elapsed:.3f} s")
+            else:
+                print(f"🥇 POSICIÓN {self.posicion_actual}: EPC={tag.epc} | Antena={tag.antenna} | {tiempo_str}")
             self.posicion_actual += 1
-    
+
     def obtener_resultados(self) -> List[dict]:
         """Retorna lista de resultados ordenados"""
         return [
@@ -279,39 +296,48 @@ class CompetenciaManager:
                 'posicion': pos,
                 'epc': tag.epc,
                 'timestamp': tag.timestamp.isoformat(),
+                'tiempo_carrera_s': self._tiempo_carrera(tag),
                 'rssi': tag.rssi,
                 'antenna': tag.antenna
             }
             for pos, tag in self.llegadas
         ]
-    
+
     def guardar_resultados(self, filename: str = 'resultados_nadadores.txt'):
         """Guarda resultados en archivo"""
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("RESULTADOS DE COMPETENCIA\n")
+            if self.hora_inicio:
+                f.write(f"Inicio (punto cero): {self.hora_inicio.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
             f.write("=" * 60 + "\n")
             for pos, tag in self.llegadas:
-                f.write(f"{pos}. EPC: {tag.epc} | Tiempo: {tag.timestamp.strftime('%H:%M:%S.%f')[:-3]} | Antena: {tag.antenna}\n")
+                linea = f"{pos}. EPC: {tag.epc} | Hora llegada: {tag.timestamp.strftime('%H:%M:%S.%f')[:-3]} | Antena: {tag.antenna}"
+                elapsed = self._tiempo_carrera(tag)
+                if elapsed is not None:
+                    linea += f" | Tiempo carrera: {elapsed:.3f} s"
+                f.write(linea + "\n")
         print(f"\n💾 Resultados guardados en {filename}")
 
 
 # Ejemplo de uso
 if __name__ == "__main__":
-    # Configuración
-    LECTOR_IP = "192.168.1.100"  # Cambiar por IP de tu lector
-    LECTOR_PORT = 6000
-    
+    from config import LECTOR_IP, LECTOR_PORT
+
     # Crear lector y gestor de competencia
     reader = RFIDReader(LECTOR_IP, LECTOR_PORT)
     competencia = CompetenciaManager()
-    
+
     # Conectar
     if not reader.connect():
         exit(1)
-    
+
     # Socket no bloqueante con timeout
     reader.socket.settimeout(0.5)
-    
+
+    # Punto cero: el usuario define cuándo empieza la carrera
+    input("Pulsa Enter para iniciar la carrera (punto cero)... ")
+    competencia.iniciar_carrera()
+
     try:
         # Leer tags y registrar llegadas
         reader.read_tags_continuous(
@@ -321,7 +347,7 @@ if __name__ == "__main__":
     finally:
         reader.disconnect()
         competencia.guardar_resultados()
-        
+
         # Mostrar resumen
         print("\n" + "=" * 60)
         print(f"Total nadadores registrados: {len(competencia.llegadas)}")

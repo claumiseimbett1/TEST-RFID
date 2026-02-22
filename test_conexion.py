@@ -6,11 +6,7 @@ Verifica conectividad con el equipo y muestra los datos recibidos
 """
 import socket
 
-# --- Configuración del equipo R300 YRM200: ajusta a tu red ---
-LECTOR_IP = "192.168.0.178"
-LECTOR_PORT = 4001
-# Algunas configuraciones usan puerto 6000:
-# LECTOR_PORT = 6000
+from config import LECTOR_IP, LECTOR_PORT
 
 # Comandos del protocolo (para mostrar nombre en consola)
 CMD_NOMBRES = {
