@@ -99,13 +99,16 @@ def cruzar_resultados(
             continue
         filas_resultados.append(row)
 
-    # Filas: posicion, epc, nombre, numero_corredor, categoria_nombre, genero, distancia, ...
+    # Filas: posicion, epc, nombre, ..., validacion (epc_en_planilla)
     filas_salida = []
     cabecera = [
         "posicion", "epc", "nombre", "numero_corredor", "categoria_nombre", "genero", "distancia",
-        "hora_llegada", "tiempo_carrera_s", "antena", "rssi", "edad_min", "edad_max"
+        "hora_llegada", "tiempo_carrera_s", "antena", "rssi", "edad_min", "edad_max",
+        "epc_en_planilla"
     ]
     filas_salida.append(cabecera)
+
+    epcs_no_en_planilla = []
 
     for row in filas_resultados:
         if len(row) < 2:
@@ -118,7 +121,12 @@ def cruzar_resultados(
 
         epc_key = _normalizar_epc(epc)
         nadador = lookup.get(epc_key, {})
+        en_planilla = epc_key in lookup
+        if not en_planilla and epc_key:
+            epcs_no_en_planilla.append(epc.strip())
+
         nombre = lookup_nombres.get(epc_key, nadador.get("nombre", ""))
+        validacion = "sí" if en_planilla else "no"
         filas_salida.append([
             posicion,
             epc,
@@ -133,6 +141,7 @@ def cruzar_resultados(
             rssi,
             nadador.get("edad_min", ""),
             nadador.get("edad_max", ""),
+            validacion,
         ])
 
     with open(salida_csv, "w", encoding="utf-8", newline="") as f:
@@ -140,6 +149,15 @@ def cruzar_resultados(
         if inicio_punto_cero is not None:
             w.writerow(["inicio_punto_cero", inicio_punto_cero])
         w.writerows(filas_salida)
+
+    if epcs_no_en_planilla:
+        print(f"  ⚠ Validación: {len(epcs_no_en_planilla)} EPC(s) no están en la planilla:")
+        for e in epcs_no_en_planilla[:10]:
+            print(f"     • {e}")
+        if len(epcs_no_en_planilla) > 10:
+            print(f"     ... y {len(epcs_no_en_planilla) - 10} más (revisa columna 'epc_en_planilla' en el CSV).")
+        else:
+            print("     Revisa la columna 'epc_en_planilla' en el CSV (filtrar por 'no').")
 
     return True
 

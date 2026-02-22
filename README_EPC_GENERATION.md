@@ -406,4 +406,4 @@ Además, al terminar se muestra la **verificación de género**: Femenino (X) + 
 
 ---
 
-Para el **registro de tiempos en carrera** (EPC + tiempo por nadador), usa **`rfid_nadadores.py`**; ver **README.md** del proyecto.
+Para el **registro de tiempos en carrera** (EPC + tiempo por nadador), usa **`rfid_nadadores.py`**; ver **README.md** del proyecto. El EPC codifica **distancia** (1K, 2K, 3K, 5K), así que puedes registrar varias distancias con el mismo punto cero y separar resultados filtrando por la columna **distancia** en `resultados_con_nadadores.csv`.

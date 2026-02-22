@@ -113,7 +113,7 @@ if reader.connect():
 
 ### `cruzar_resultados.py` – Cruce EPC → nadador (con nombre opcional)
 
-Cruza los resultados de la carrera con la planilla de EPCs y genera **`resultados_con_nadadores.csv`** con: posición, EPC, **nombre** (opcional), número corredor, categoría, género, distancia, hora llegada, tiempo carrera, antena, rssi, edades.
+Cruza los resultados de la carrera con la planilla de EPCs y genera **`resultados_con_nadadores.csv`** con: posición, EPC, **nombre** (opcional), número corredor, categoría, género, distancia, hora llegada, tiempo carrera, antena, rssi, edades y **`epc_en_planilla`** (sí/no). Si algún EPC no está en la planilla, la fila se escribe igual con `epc_en_planilla=no` y al final se muestra un aviso con la lista de EPCs no encontrados (para filtrar en Excel por "no").
 
 - **Planilla**: `tags_para_registro.csv` (de generar_epcs) — obligatoria para el cruce.
 - **Nombres (opcional)**: Si existe **`nombres_nadadores.csv`** con columnas `epc` y `nombre`, cada EPC se asocia al nombre del nadador y se incluye en la columna **nombre** del CSV de salida. Así puedes cargar un listado EPC → nombre (ej. inscritos) y que el cruce lo use.
@@ -154,6 +154,24 @@ python --version  # Verificar 3.6+
 
 ---
 
+## Pruebas (tests)
+
+Hay tests unitarios y de integración para el cruce de resultados y el guardado.
+
+**Requisito:** `pytest` (opcional).  
+`pip install pytest`
+
+**Ejecutar desde la raíz del proyecto:**
+
+```bash
+python -m pytest tests/ -v
+```
+
+- **`tests/test_cruzar_resultados.py`**: normalización de EPC, carga de nombres, cruce con planilla, columna `epc_en_planilla` (sí/no), archivos faltantes, uso opcional de `nombres_nadadores.csv`.
+- **`tests/test_rfid_nadadores.py`**: `CompetenciaManager` (punto cero, llegadas, duplicados, tiempos), formato del CSV de resultados al guardar.
+
+---
+
 ## Flujo de trabajo para competencia
 
 1. Ajusta `LECTOR_IP` y `LECTOR_PORT` en `config.py`.
@@ -184,14 +202,14 @@ posicion,epc,hora_llegada,tiempo_carrera_s,antena,rssi
 2,E28011910000000000000002,14:23:46.789,34.122,2,-48
 ```
 
-**Archivo `resultados_con_nadadores.csv`** (si existe planilla `tags_para_registro.csv`; columna **nombre** si existe `nombres_nadadores.csv`):
+**Archivo `resultados_con_nadadores.csv`** (si existe planilla `tags_para_registro.csv`; columna **nombre** si existe `nombres_nadadores.csv`; columna **epc_en_planilla** para validar si el EPC está en la planilla: sí/no):
 ```csv
 inicio_punto_cero,2025-02-22 14:23:12.667
-posicion,epc,nombre,numero_corredor,categoria_nombre,genero,distancia,hora_llegada,tiempo_carrera_s,antena,rssi,edad_min,edad_max
-1,E2801190...,María García,1,Infantil A,Femenino,2000,14:23:45.123,32.456,1,-50,8,9
-2,E2801191...,Carlos López,2,Juvenil A,Masculino,2000,14:23:46.789,34.122,2,-48,12,13
+posicion,epc,nombre,numero_corredor,categoria_nombre,genero,distancia,hora_llegada,tiempo_carrera_s,antena,rssi,edad_min,edad_max,epc_en_planilla
+1,E2801190...,María García,1,Infantil A,Femenino,2000,14:23:45.123,32.456,1,-50,8,9,sí
+2,E2801191...,Carlos López,2,Juvenil A,Masculino,2000,14:23:46.789,34.122,2,-48,12,13,sí
 ```
-Con este archivo sabes **qué nadador es** cada EPC (nombre, número, categoría, género, distancia). La columna **nombre** se rellena si tienes `nombres_nadadores.csv` (epc, nombre).
+Con este archivo sabes **qué nadador es** cada EPC (nombre, número, categoría, género, distancia). La columna **nombre** se rellena si tienes `nombres_nadadores.csv` (epc, nombre). Si en una misma salida compites **varias distancias** (p. ej. 2K y 3K) con el **mismo punto cero**, todas las llegadas quedan en este CSV; puedes separar por carrera **filtrando por la columna `distancia`** en Excel (cada EPC ya trae su distancia en la planilla).
 
 El **tiempo de carrera** de cada nadador es el número de segundos desde el punto cero hasta la detección de su tag.
 
@@ -205,6 +223,7 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 - **RSSI**: Valor en dBm (negativo; ej. -50 dBm = señal fuerte).
 - **Duplicados**: Se ignora la segunda y siguientes detecciones del mismo EPC.
 - **Hora**: Usa NTP en el PC para que los tiempos sean coherentes.
+- **Varias distancias en un registro**: Puedes tener varias carreras (p. ej. 2K y 3K) con el **mismo punto cero** en una sola sesión; el EPC incluye la distancia. En `resultados_con_nadadores.csv` la columna **distancia** permite filtrar por carrera.
 
 ---
 
@@ -233,7 +252,7 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 | Origen | Archivos |
 |--------|----------|
 | **rfid_nadadores** | `resultados_nadadores.csv` |
-| **rfid_nadadores + planilla** | `resultados_con_nadadores.csv` (EPC, nombre si hay `nombres_nadadores.csv`, número, categoría, género, distancia, tiempos) |
+| **rfid_nadadores + planilla** | `resultados_con_nadadores.csv` (EPC, nombre si hay `nombres_nadadores.csv`, número, categoría, género, distancia, tiempos, epc_en_planilla) |
 | **cruzar_resultados** | `resultados_con_nadadores.csv` (mismo; opcionalmente usa `nombres_nadadores.csv`) |
 | **generar_epcs** | `tags_para_registro.csv`, `tags_completo.json`, `epcs_para_writer.txt` (solo lista de EPCs para el writer) |
 
