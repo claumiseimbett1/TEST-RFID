@@ -1,38 +1,44 @@
 # 📘 Guía Completa - Generador de EPCs RFID
 
-Generador de códigos EPC para competencias de natación (FECNA). **Tú indicas cuántos nadadores** en total (no está fijado en 100). Para cada distancia indicas **cantidad femenino** y **cantidad masculino**; el programa **verifica que F+M sumen** el total y, al final, exporta en **TXT**, **CSV** y **JSON**.
+Generador de códigos EPC para competencias de natación (FECNA). **Tú defines** hasta 4 distancias (carreras), el **número de nadadores en cada una** y, por carrera, **femeninos y masculinos** (F+M debe sumar ese total). Exporta **TXT** (para el writer), **CSV** (planilla) y **JSON** (backup).
 
-## 🎯 Todas las Formas de Configurar
+**Ejecución:** desde la raíz del proyecto: `python generar_epcs.py` o `python3 generar_epcs.py`.
 
-### Método 1: Modo Interactivo (Recomendado)
+## 🎯 Uso
+
+### Modo interactivo
 
 ```bash
-python3 generar_epcs.py
+python generar_epcs.py
 ```
 
-Tienes **3 opciones**:
+El programa pide:
 
-#### Opción 1: Manual
-- Usa la configuración de ejemplo predefinida en código (categorías y cantidades por categoría/género).
-
-#### Opción 2: Simple
-- **Tú dices cuántos nadadores** (cualquier número; Enter = 100).
-- Una sola distancia; 50% F / 50% M. Se exportan TXT, CSV y JSON.
-
-#### Opción 3: Cantidades ⭐
-- **Tú dices cuántos nadadores** en total y la **cantidad por distancia** (las cantidades deben sumar el total).
-- Para cada distancia indicas **cantidad femenino** y **cantidad masculino**; el programa **verifica que F+M sumen** la cantidad de esa distancia (si no, vuelve a pedir).
+- **Cuántas distancias (carreras) simultáneas** (1 a 4).
+- Por cada carrera: **distancia** (1K/2K/3K/5K), **número de nadadores** en esa distancia, y luego **femeninos** y **masculinos** (F+M debe sumar ese total).
+- El total de nadadores del evento es la suma de todas las distancias. Las categorías FECNA se reparten automáticamente.
 
 **Ejemplo:**
 ```
-Total: 100 nadadores
-Carrera 1 (2K): 35 → Femenino: 17, Masculino: 18 ✓
-Carrera 2 (3K): 65 → Femenino: 32, Masculino: 33 ✓
+¿Cuántas distancias (carreras) simultáneas? (1 a 4): 3
+--- Carrera 1 ---
+  Distancia (1K/2K/3K/5K): 1K
+  Número de nadadores en 1K: 20
+  De esos 20, número de FEMENINOS [10]: 10
+  De esos 20, número de MASCULINOS [10]: 10
+--- Carrera 2 ---
+  Distancia (1K/2K/3K/5K): 2K
+  Número de nadadores en 2K: 35
+  De esos 35, número de FEMENINOS [17]: 17
+  De esos 35, número de MASCULINOS [18]: 18
+--- Carrera 3 ---
+  ...
+→ Total de nadadores: (suma de todas las distancias)
 ```
 
 ---
 
-### Método 2: Por Código Python
+### Por código Python
 
 Siempre usas **cantidad** por distancia (las cantidades deben sumar el total de nadadores):
 
@@ -61,8 +67,13 @@ config = gen.generar_distribucion_automatica(
 )
 
 gen.generar_lote_carreras(config)
-gen.exportar_para_writer('mis_tags.txt')
+# Exportar (nombres por defecto del proyecto)
+gen.exportar_para_writer('epcs_para_writer.txt')
+gen.exportar_csv('tags_para_registro.csv')
+gen.exportar_json('tags_completo.json')
 ```
+
+Si quieres otros nombres de archivo, pasa el path a cada `exportar_*`.
 
 ---
 
@@ -123,22 +134,33 @@ usar_todas_categorias=True
 'distancia': '5K'  # 5000 metros
 ```
 
+### 6. Estructura del EPC (24 caracteres hex)
+
+Cada EPC tiene **24 caracteres hexadecimales** (12 bytes):
+
+| Parte      | Tamaño | Contenido |
+|-----------|--------|-----------|
+| Header    | 2      | E2 (fijo) |
+| Evento    | 2      | 80 (fijo) |
+| Año       | 4      | Ej. 07EA = 2026 |
+| Distancia | 2      | 01=1K, 02=2K, 03=3K, 05=5K |
+| Categoría | 2      | Código FECNA |
+| Género    | 2      | 01=F, 02=M |
+| Corredor  | 6      | Número 1–999 (3 bytes) |
+| Reserved  | 2      | 00 |
+| Checksum  | 2      | XOR de los bytes anteriores |
+
+La **distancia** va codificada en el EPC, por eso puedes registrar varias carreras (distancias) con el mismo punto cero y separar resultados por la columna **distancia** en `resultados_con_nadadores.csv` (ver README.md).
+
 ---
 
 ## 📊 Ejemplos Prácticos
 
 ### Ejemplo 1: 80 tags, 30 en 2K, 50 en 3K
 
-```bash
-python3 generar_epcs.py
-# Opción 3 (Cantidades)
-# Total: 80
-# Distancias: 2
-# Carrera 1: 2K, 30
-# Carrera 2: 3K, 50
-```
+**Interactivo:** `python generar_epcs.py` → Cuántas distancias: 2 → Carrera 1: 2K, 30 nadadores, F/M (ej. 15/15) → Carrera 2: 3K, 50 nadadores, F/M (ej. 25/25).
 
-O por código:
+**Por código:**
 ```python
 gen = EPCGenerator(prefijo_evento="2026")
 
@@ -254,21 +276,13 @@ total_nadadores=100
 
 ```bash
 # 1. Ejecutar
-python3 generar_epcs.py
+python generar_epcs.py
 
-# 2. Seleccionar modo 3 (Cantidades)
-
-# 3. Responder:
-Total: 100
-Distancias: 2
-Carrera 1: 2K, cantidad 35
-Carrera 2: 3K, cantidad 65 (resto)
-Femenino/Masculino por carrera (con verificación F+M)
-
-# 4. Archivos generados:
-# - epcs_para_writer.txt (para writer RFID)
-# - tags_para_registro.csv (para Excel)
-# - tags_completo.json (backup)
+# 2. Responder: cuántas distancias (1 a 4). Por cada carrera: distancia, nº de nadadores, luego nº femeninos y masculinos (F+M = total de esa carrera).
+# 3. Al terminar se exportan:
+#    - epcs_para_writer.txt (para writer RFID)
+#    - tags_para_registro.csv (para Excel / cruzar_resultados)
+#    - tags_completo.json (backup)
 ```
 
 ### Opción B: Script Personalizado
@@ -291,6 +305,7 @@ def generar_mis_tags():
     gen.generar_lote_carreras(config)
     gen.exportar_para_writer('mis_100_tags.txt')
     gen.exportar_csv('mis_100_tags.csv')
+    gen.exportar_json('mis_100_tags.json')
     gen.imprimir_resumen()
     
     print(f"\n✅ Generados {len(gen.tags_generados)} tags")
@@ -374,8 +389,8 @@ distancias_config=[
 
 ### Evento Grande (100+ nadadores)
 ```python
-# Usar control manual para precisión
-# Editar configurar_evento_ejemplo() en generar_epcs.py
+# Mismo flujo: hasta 4 distancias, nadadores y F/M por cada una
+# O usar código Python con generar_distribucion_automatica() para más control
 ```
 
 ---
@@ -387,19 +402,16 @@ Al finalizar, el programa genera **tres archivos** en formatos adecuados:
 | Formato | Archivo | Contenido |
 |--------|---------|-----------|
 | **TXT** | `epcs_para_writer.txt` | Un EPC por línea, sin espacios; para copiar al writer RFID. |
-| **CSV** | `tags_para_registro.csv` | Tabla para Excel: EPC, número corredor, categoría, género, distancia, edades. |
+| **CSV** | `tags_para_registro.csv` | Tabla para Excel / cruce: `epc_formateado`, numero_corredor, categoria_nombre, genero, distancia (metros), edad_min, edad_max. Usado por `cruzar_resultados.py`. |
 | **JSON** | `tags_completo.json` | Backup con metadata completa del evento y de cada tag. |
 
-Además, al terminar se muestra la **verificación de género**: Femenino (X) + Masculino (Y) = Total ✓.
+En modo interactivo los archivos se generan con esos nombres en el directorio actual. Al terminar se muestra la **verificación de género**: Femenino (X) + Masculino (Y) = Total ✓.
 
 ---
 
 ## ✅ Checklist Final
 
-- [ ] Total de nadadores definido (tú lo indicas; no está fijado en 100)
-- [ ] Cantidad por distancia definida (suma = total)
-- [ ] Cantidad femenino y masculino definida por distancia (verificación F+M)
-- [ ] Categorías de enfoque seleccionadas
+- [ ] Número de distancias (1 a 4) y, por cada una: distancia (1K/2K/3K/5K), nº de nadadores, femeninos y masculinos (F+M = total de esa carrera)
 - [ ] EPCs generados y exportados (TXT, CSV, JSON)
 - [ ] CSV abierto en Excel y verificado
 - [ ] Tags listos para programar en writer RFID

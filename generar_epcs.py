@@ -695,113 +695,57 @@ if __name__ == "__main__":
     print("║  Sistema FECNA - Tags RFID UHF                                  ║")
     print("╚═══════════════════════════════════════════════════════════════════╝")
 
-    print("\n🎯 Selecciona el modo de generación:")
-    print("\n1. Manual     - Define exactamente cada categoría (configurar_evento_ejemplo)")
-    print("2. Simple     - Tú dices cuántos nadadores; una sola distancia, 50% F / 50% M")
-    print("3. Cantidades - Tú dices total y cantidad por distancia; F/M por carrera con verificación\n")
+    print("\n🎯 Define el número de nadadores en cada distancia (hasta 4) y luego F/M por carrera.\n")
 
-    modo = input("Selecciona modo (1/2/3) [Enter=3]: ").strip() or "3"
+    while True:
+        num_inp = input("¿Cuántas distancias (carreras) simultáneas? (1 a 4): ").strip()
+        if num_inp.isdigit():
+            num_distancias = int(num_inp)
+            if 1 <= num_distancias <= 4:
+                break
+        print("  ⚠ Escribe un número entre 1 y 4.")
+    distancias_validas = ('1K', '2K', '3K', '5K')
+    config_dist = []
+    for i in range(num_distancias):
+        print(f"\n--- Carrera {i + 1} ---")
+        while True:
+            d = input(f"  Distancia (1K/2K/3K/5K): ").strip().upper()
+            if d in distancias_validas:
+                break
+            print(f"  ⚠ Usa una de: 1K, 2K, 3K, 5K")
+        while True:
+            inp_t = input(f"  Número de nadadores en {d}: ").strip()
+            total_dist = int(inp_t) if inp_t.isdigit() else 0
+            if total_dist > 0:
+                break
+            print("  ⚠ Escribe un número mayor que 0.")
+        while True:
+            inp_f = input(f"  De esos {total_dist}, número de FEMENINOS [{total_dist // 2}]: ").strip()
+            inp_m = input(f"  De esos {total_dist}, número de MASCULINOS [{total_dist - total_dist // 2}]: ").strip()
+            default_f = total_dist // 2
+            default_m = total_dist - default_f
+            cant_f = int(inp_f) if inp_f.isdigit() else default_f
+            cant_m = int(inp_m) if inp_m.isdigit() else default_m
+            if cant_f + cant_m == total_dist:
+                print(f"  → {d}: {total_dist} nadadores (F: {cant_f}, M: {cant_m}) ✓")
+                config_dist.append({
+                    'distancia': d,
+                    'cantidad': total_dist,
+                    'cantidad_femenino': cant_f,
+                    'cantidad_masculino': cant_m,
+                })
+                break
+            print(f"  ⚠ Femenino + Masculino debe sumar {total_dist}. Vuelve a ingresar.")
+    total_nadadores = sum(c['cantidad'] for c in config_dist)
+    print(f"\n📊 Total de nadadores: {total_nadadores}")
 
-    if modo == "1":
-        print("\n📋 Modo MANUAL - Usando configuración de ejemplo predefinida")
-        generador = configurar_evento_ejemplo()
-    elif modo == "2":
-        print("\n⚡ Modo SIMPLE")
-        total_nadadores = _pedir_total_nadadores("¿Cuántos nadadores (tags) quieres generar?")
-        print(f"\n📊 Total: {total_nadadores} nadadores (una sola distancia, 50% F / 50% M)")
-        config = [
-            {
-                'distancia': '2K',
-                'cantidad': total_nadadores,
-                'cantidad_femenino': total_nadadores // 2,
-                'cantidad_masculino': total_nadadores - total_nadadores // 2
-            }
-        ]
-        generador = EPCGenerator(prefijo_evento="2026")
-        generador.generar_distribucion_automatica(
-            total_nadadores=total_nadadores,
-            distancias_config=config,
-            usar_todas_categorias=True
-        )
-        generador.generar_lote_carreras(config)
-    elif modo == "3":
-        print("\n🎯 Modo CANTIDADES EXACTAS")
-
-        total_nadadores = _pedir_total_nadadores("¿Cuántos nadadores en total?")
-        print(f"\n📊 Total: {total_nadadores} nadadores")
-        num_dist = input("¿Cuántas distancias? (1 o 2) [2]: ").strip()
-        num_distancias = 2 if num_dist != "1" else 1
-
-        if num_distancias == 1:
-            dist = input("\n¿Qué distancia? (1K/2K/3K/5K) [2K]: ").strip().upper() or "2K"
-            print(f"\nPara {dist} ({total_nadadores} nadadores):")
-            cant_f, cant_m = _pedir_femenino_masculino(total_nadadores)
-            config_dist = [
-                {'distancia': dist, 'cantidad': total_nadadores, 'cantidad_femenino': cant_f, 'cantidad_masculino': cant_m}
-            ]
-        else:
-            print("\nCarrera 1:")
-            dist1 = input("  Distancia (1K/2K/3K/5K) [2K]: ").strip().upper() or "2K"
-            while True:
-                cant1_inp = input(f"  Cantidad de nadadores en {dist1} (resto irá a carrera 2): ").strip()
-                cant1 = int(cant1_inp) if cant1_inp.isdigit() else 0
-                if 0 < cant1 < total_nadadores:
-                    break
-                print(f"  ⚠ Debe ser un número entre 1 y {total_nadadores - 1}")
-            cant2 = total_nadadores - cant1
-            print(f"  → Carrera 2 tendrá {cant2} nadadores.")
-            print(f"\n  Género para {dist1} ({cant1} nadadores):")
-            cant_f1, cant_m1 = _pedir_femenino_masculino(cant1, f" en {dist1}")
-            print(f"\nCarrera 2:")
-            dist2 = input("  Distancia (1K/2K/3K/5K) [3K]: ").strip().upper() or "3K"
-            print(f"  Género para {dist2} ({cant2} nadadores):")
-            cant_f2, cant_m2 = _pedir_femenino_masculino(cant2, f" en {dist2}")
-            config_dist = [
-                {'distancia': dist1, 'cantidad': cant1, 'cantidad_femenino': cant_f1, 'cantidad_masculino': cant_m1,
-                 'categorias_enfoque': ['INF_A', 'INF_B', 'JUV_A', 'JUV_B']},
-                {'distancia': dist2, 'cantidad': cant2, 'cantidad_femenino': cant_f2, 'cantidad_masculino': cant_m2,
-                 'categorias_enfoque': ['MAY_A', 'MAY_B', 'MAS_A', 'MAS_B']}
-            ]
-
-        generador = EPCGenerator(prefijo_evento="2026")
-        config = generador.generar_distribucion_automatica(
-            total_nadadores=total_nadadores,
-            distancias_config=config_dist,
-            usar_todas_categorias=True
-        )
-        generador.generar_lote_carreras(config)
-    else:
-        print("Opción no válida. Usando Modo 3 (Cantidades).")
-        modo = "3"
-        total_nadadores = _pedir_total_nadadores("¿Cuántos nadadores en total?")
-        print(f"\n📊 Total: {total_nadadores} nadadores")
-        num_distancias = 2 if input("¿Cuántas distancias? (1 o 2) [2]: ").strip() != "1" else 1
-        if num_distancias == 1:
-            dist = input("\n¿Qué distancia? (1K/2K/3K/5K) [2K]: ").strip().upper() or "2K"
-            print(f"\nPara {dist} ({total_nadadores} nadadores):")
-            cant_f, cant_m = _pedir_femenino_masculino(total_nadadores)
-            config_dist = [{'distancia': dist, 'cantidad': total_nadadores, 'cantidad_femenino': cant_f, 'cantidad_masculino': cant_m}]
-        else:
-            dist1 = input("\nCarrera 1 - Distancia (1K/2K/3K/5K) [2K]: ").strip().upper() or "2K"
-            while True:
-                cant1_inp = input(f"  Cantidad en {dist1}: ").strip()
-                cant1 = int(cant1_inp) if cant1_inp.isdigit() else 0
-                if 0 < cant1 < total_nadadores:
-                    break
-                print(f"  ⚠ Entre 1 y {total_nadadores - 1}")
-            cant2 = total_nadadores - cant1
-            dist2 = input(f"\nCarrera 2 - Distancia [3K]: ").strip().upper() or "3K"
-            print(f"  Género {dist1} ({cant1}):")
-            cant_f1, cant_m1 = _pedir_femenino_masculino(cant1, f" en {dist1}")
-            print(f"  Género {dist2} ({cant2}):")
-            cant_f2, cant_m2 = _pedir_femenino_masculino(cant2, f" en {dist2}")
-            config_dist = [
-                {'distancia': dist1, 'cantidad': cant1, 'cantidad_femenino': cant_f1, 'cantidad_masculino': cant_m1, 'categorias_enfoque': ['INF_A', 'INF_B', 'JUV_A', 'JUV_B']},
-                {'distancia': dist2, 'cantidad': cant2, 'cantidad_femenino': cant_f2, 'cantidad_masculino': cant_m2, 'categorias_enfoque': ['MAY_A', 'MAY_B', 'MAS_A', 'MAS_B']}
-            ]
-        generador = EPCGenerator(prefijo_evento="2026")
-        config = generador.generar_distribucion_automatica(total_nadadores=total_nadadores, distancias_config=config_dist, usar_todas_categorias=True)
-        generador.generar_lote_carreras(config)
+    generador = EPCGenerator(prefijo_evento="2026")
+    config = generador.generar_distribucion_automatica(
+        total_nadadores=total_nadadores,
+        distancias_config=config_dist,
+        usar_todas_categorias=True
+    )
+    generador.generar_lote_carreras(config)
 
     # Mostrar resultados
     generador.imprimir_resumen()
@@ -848,7 +792,6 @@ if __name__ == "__main__":
     
     print("\n" + "="*70)
     print("💡 TIPS:")
-    print("   • Modo 2 (Simple): Una distancia, 50% F / 50% M")
-    print("   • Modo 3 (Cantidades): Cantidad por distancia y F/M con verificación")
-    print("   • Para control total: Edita configurar_evento_ejemplo()")
+    print("   • Define hasta 4 distancias; en cada una, nº de nadadores y luego F/M (deben sumar)")
+    print("   • Para control por código: usa EPCGenerator y generar_distribucion_automatica()")
     print("="*70)

@@ -8,7 +8,7 @@ Software para el control y registro de tiempos en natación usando **RFID UHF** 
 - **`test_conexion.py`**: Prueba de conexión al lector; muestra datos [TEXTO]/[HEX].
 - **`rfid_nadadores.py`**: Registra llegadas por EPC y **exporta en CSV** (`resultados_nadadores.csv`). Si existe `tags_para_registro.csv`, genera **`resultados_con_nadadores.csv`** (con nombre si hay `nombres_nadadores.csv`).
 - **`cruzar_resultados.py`**: Cruza resultados con la planilla y opcionalmente con `nombres_nadadores.csv`; salida en **CSV**.
-- **`generar_epcs.py`**: Generador de EPCs; exporta **CSV** (planilla), **JSON** (backup) y **TXT** solo para el writer (lista de EPCs). Ver **README_EPC_GENERATION.md**.
+- **`generar_epcs.py`**: Generador de EPCs; tú defines hasta 4 distancias, el nº de nadadores en cada una y F/M. Exporta **CSV** (planilla), **JSON** (backup) y **TXT** para el writer. Ver **README_EPC_GENERATION.md**.
 
 ## Hardware
 
@@ -260,7 +260,7 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 
 ## Otros programas del proyecto
 
-- **Generador de EPCs** (`generar_epcs.py`): Crea códigos EPC por categoría/género/distancia para programar tags. Exporta **TXT**, **CSV** y **JSON**. Ver **README_EPC_GENERATION.md**.
+- **Generador de EPCs** (`generar_epcs.py`): Define hasta 4 distancias, nadadores por distancia y F/M; genera EPCs y exporta **TXT**, **CSV** y **JSON**. Ver **README_EPC_GENERATION.md**.
 - **Cruce de resultados** (`cruzar_resultados.py`): Cruce resultados de carrera con planilla de EPCs; se ejecuta solo o desde rfid_nadadores al guardar.
 
 ---
