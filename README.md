@@ -2,6 +2,11 @@
 
 Software para el control y registro de tiempos en natación usando **RFID UHF** con el lector **R300 YRM200** (RFID reader module). Conexión por TCP/IP; el tiempo de cada nadador se calcula desde un **punto cero** que tú defines (inicio de carrera).
 
+**Resumen rápido:**
+- **`test_conexion.py`**: Prueba de conexión al lector; muestra datos [TEXTO]/[HEX].
+- **`rfid_nadadores.py`**: Registra llegadas por EPC y **exporta EPC + tiempo de cada nadador** en **TXT** y **CSV** (`resultados_nadadores.txt`, `resultados_nadadores.csv`).
+- **`generar_epcs.py`**: Generador de códigos EPC para tags (ver **README_EPC_GENERATION.md**). Exporta en **TXT**, **CSV** y **JSON**.
+
 ## Hardware
 
 - **Lector:** R300 YRM200 – Módulo lector RFID UHF.
@@ -69,7 +74,7 @@ Sistema con clases para gestión de competencia y **cálculo del tiempo de carre
 - Parsea tramas según protocolo R300 YRM200.
 - Extrae EPC (24 caracteres), antena, RSSI, timestamp.
 - Registra solo la primera detección de cada EPC (evita duplicados).
-- Guarda resultados con hora de llegada y, si hay punto cero, tiempo de carrera en segundos.
+- Guarda resultados en **.txt** y **.csv** (mismo nombre base): hora de llegada y, si hay punto cero, tiempo de carrera en segundos.
 - Al ejecutar como script, pide **Enter para iniciar la carrera** y luego lee tags hasta Ctrl+C.
 
 **Uso desde consola:**
@@ -79,7 +84,7 @@ python rfid_nadadores.py
 1. Conecta al lector.
 2. Pulsa **Enter** para marcar el inicio de la carrera (punto cero).
 3. Los nadadores pasan por las antenas; se muestra posición, EPC, hora de llegada y tiempo de carrera.
-4. **Ctrl+C** para detener; se guardan los resultados en `resultados_nadadores.txt`.
+4. **Ctrl+C** para detener; se guardan los resultados en `resultados_nadadores.txt` y `resultados_nadadores.csv`.
 
 **Uso programático:**
 ```python
@@ -134,8 +139,8 @@ python --version  # Verificar 3.6+
 3. Ejecuta `python rfid_nadadores.py`.
 4. Cuando estés listo (p. ej. al dar la salida), **pulsa Enter** para marcar el punto cero.
 5. Los nadadores pasan por las antenas; se registran posición, EPC, hora de llegada y tiempo de carrera.
-6. **Ctrl+C** para finalizar; se guarda `resultados_nadadores.txt`.
-7. Revisa el archivo: incluye inicio (punto cero) y, por cada nadador, hora de llegada y tiempo de carrera en segundos.
+6. **Ctrl+C** para finalizar; se guardan `resultados_nadadores.txt` y `resultados_nadadores.csv`.
+7. Revisa los archivos: incluyen inicio (punto cero) y, por cada nadador, hora de llegada y tiempo de carrera en segundos.
 
 ---
 
@@ -156,6 +161,14 @@ Inicio (punto cero): 2025-02-22 14:23:12.667
 ============================================================
 1. EPC: E28011900000000000000001 | Hora llegada: 14:23:45.123 | Antena: 1 | Tiempo carrera: 32.456 s
 2. EPC: E28011910000000000000002 | Hora llegada: 14:23:46.789 | Antena: 2 | Tiempo carrera: 34.122 s
+```
+
+**Archivo `resultados_nadadores.csv`** (para Excel o hojas de cálculo):
+```csv
+inicio_punto_cero,2025-02-22 14:23:12.667
+posicion,epc,hora_llegada,tiempo_carrera_s,antena,rssi
+1,E28011900000000000000001,14:23:45.123,32.456,1,-50
+2,E28011910000000000000002,14:23:46.789,34.122,2,-48
 ```
 
 El **tiempo de carrera** de cada nadador es el número de segundos desde el punto cero hasta la detección de su tag.
@@ -192,6 +205,10 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 - **Carriles por antena**: mapear número de antena a carril (ej. diccionario `CARRILES = {1: "Carril 1", 2: "Carril 2", ...}`).
 
 ---
+
+## Otros programas del proyecto
+
+- **Generador de EPCs** (`generar_epcs.py`): Crea códigos EPC por categoría/género/distancia para programar tags. Exporta **TXT** (para writer), **CSV** (registro) y **JSON** (backup). Ver **README_EPC_GENERATION.md** para uso completo.
 
 ## Referencias
 

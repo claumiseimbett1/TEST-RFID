@@ -3,6 +3,7 @@
 Lector RFID para control de nadadores - R300 YRM200 (RFID reader module)
 Protocolo: Tramas binarias 0xA0 [Len] [ReaderId] [Cmd] [Data] [Checksum]
 """
+import csv
 import socket
 import struct
 from datetime import datetime
@@ -303,9 +304,13 @@ class CompetenciaManager:
             for pos, tag in self.llegadas
         ]
 
-    def guardar_resultados(self, filename: str = 'resultados_nadadores.txt'):
-        """Guarda resultados en archivo"""
-        with open(filename, 'w', encoding='utf-8') as f:
+    def guardar_resultados(self, nombre_base: str = 'resultados_nadadores'):
+        """Guarda resultados en archivo .txt y .csv (mismo nombre base)."""
+        filename_txt = f"{nombre_base}.txt"
+        filename_csv = f"{nombre_base}.csv"
+
+        # --- TXT (legible) ---
+        with open(filename_txt, 'w', encoding='utf-8') as f:
             f.write("RESULTADOS DE COMPETENCIA\n")
             if self.hora_inicio:
                 f.write(f"Inicio (punto cero): {self.hora_inicio.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
@@ -316,7 +321,25 @@ class CompetenciaManager:
                 if elapsed is not None:
                     linea += f" | Tiempo carrera: {elapsed:.3f} s"
                 f.write(linea + "\n")
-        print(f"\n💾 Resultados guardados en {filename}")
+
+        # --- CSV (para Excel/hojas de cálculo) ---
+        with open(filename_csv, 'w', encoding='utf-8', newline='') as f:
+            w = csv.writer(f)
+            if self.hora_inicio:
+                w.writerow(["inicio_punto_cero", self.hora_inicio.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]])
+            w.writerow(["posicion", "epc", "hora_llegada", "tiempo_carrera_s", "antena", "rssi"])
+            for pos, tag in self.llegadas:
+                elapsed = self._tiempo_carrera(tag)
+                w.writerow([
+                    pos,
+                    tag.epc,
+                    tag.timestamp.strftime('%H:%M:%S.%f')[:-3],
+                    f"{elapsed:.3f}" if elapsed is not None else "",
+                    tag.antenna,
+                    tag.rssi
+                ])
+
+        print(f"\n💾 Resultados guardados en {filename_txt} y {filename_csv}")
 
 
 # Ejemplo de uso
