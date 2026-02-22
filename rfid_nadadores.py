@@ -305,24 +305,9 @@ class CompetenciaManager:
         ]
 
     def guardar_resultados(self, nombre_base: str = 'resultados_nadadores'):
-        """Guarda resultados en archivo .txt y .csv (mismo nombre base)."""
-        filename_txt = f"{nombre_base}.txt"
+        """Guarda resultados en CSV (mismo nombre base)."""
         filename_csv = f"{nombre_base}.csv"
 
-        # --- TXT (legible) ---
-        with open(filename_txt, 'w', encoding='utf-8') as f:
-            f.write("RESULTADOS DE COMPETENCIA\n")
-            if self.hora_inicio:
-                f.write(f"Inicio (punto cero): {self.hora_inicio.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
-            f.write("=" * 60 + "\n")
-            for pos, tag in self.llegadas:
-                linea = f"{pos}. EPC: {tag.epc} | Hora llegada: {tag.timestamp.strftime('%H:%M:%S.%f')[:-3]} | Antena: {tag.antenna}"
-                elapsed = self._tiempo_carrera(tag)
-                if elapsed is not None:
-                    linea += f" | Tiempo carrera: {elapsed:.3f} s"
-                f.write(linea + "\n")
-
-        # --- CSV (para Excel/hojas de cálculo) ---
         with open(filename_csv, 'w', encoding='utf-8', newline='') as f:
             w = csv.writer(f)
             if self.hora_inicio:
@@ -339,7 +324,15 @@ class CompetenciaManager:
                     tag.rssi
                 ])
 
-        print(f"\n💾 Resultados guardados en {filename_txt} y {filename_csv}")
+        print(f"\n💾 Resultados guardados en {filename_csv}")
+
+        # Cruce con planilla de EPCs (tags_para_registro.csv) si existe
+        try:
+            from cruzar_resultados import cruzar_resultados, PLANILLA_CSV, SALIDA_CSV
+            if cruzar_resultados(resultados_csv=filename_csv, salida_csv=SALIDA_CSV):
+                print(f"   Cruce con planilla → {SALIDA_CSV} (EPC + número corredor, categoría, género, distancia)")
+        except Exception:
+            pass
 
 
 # Ejemplo de uso

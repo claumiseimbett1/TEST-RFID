@@ -2,10 +2,13 @@
 
 Software para el control y registro de tiempos en natación usando **RFID UHF** con el lector **R300 YRM200** (RFID reader module). Conexión por TCP/IP; el tiempo de cada nadador se calcula desde un **punto cero** que tú defines (inicio de carrera).
 
+**Salidas:** Se usa **CSV** para resultados y planillas (Excel, cruce) y **JSON** para backup con metadata. El único **TXT** es la lista de EPCs para el writer (`epcs_para_writer.txt`), que muchos equipos esperan en ese formato.
+
 **Resumen rápido:**
 - **`test_conexion.py`**: Prueba de conexión al lector; muestra datos [TEXTO]/[HEX].
-- **`rfid_nadadores.py`**: Registra llegadas por EPC y **exporta EPC + tiempo de cada nadador** en **TXT** y **CSV** (`resultados_nadadores.txt`, `resultados_nadadores.csv`).
-- **`generar_epcs.py`**: Generador de códigos EPC para tags (ver **README_EPC_GENERATION.md**). Exporta en **TXT**, **CSV** y **JSON**.
+- **`rfid_nadadores.py`**: Registra llegadas por EPC y **exporta en CSV** (`resultados_nadadores.csv`). Si existe `tags_para_registro.csv`, genera **`resultados_con_nadadores.csv`** (con nombre si hay `nombres_nadadores.csv`).
+- **`cruzar_resultados.py`**: Cruza resultados con la planilla y opcionalmente con `nombres_nadadores.csv`; salida en **CSV**.
+- **`generar_epcs.py`**: Generador de EPCs; exporta **CSV** (planilla), **JSON** (backup) y **TXT** solo para el writer (lista de EPCs). Ver **README_EPC_GENERATION.md**.
 
 ## Hardware
 
@@ -74,7 +77,7 @@ Sistema con clases para gestión de competencia y **cálculo del tiempo de carre
 - Parsea tramas según protocolo R300 YRM200.
 - Extrae EPC (24 caracteres), antena, RSSI, timestamp.
 - Registra solo la primera detección de cada EPC (evita duplicados).
-- Guarda resultados en **.txt** y **.csv** (mismo nombre base): hora de llegada y, si hay punto cero, tiempo de carrera en segundos.
+- Guarda resultados en **CSV** (mismo nombre base): hora de llegada y, si hay punto cero, tiempo de carrera en segundos.
 - Al ejecutar como script, pide **Enter para iniciar la carrera** y luego lee tags hasta Ctrl+C.
 
 **Uso desde consola:**
@@ -84,7 +87,7 @@ python rfid_nadadores.py
 1. Conecta al lector.
 2. Pulsa **Enter** para marcar el inicio de la carrera (punto cero).
 3. Los nadadores pasan por las antenas; se muestra posición, EPC, hora de llegada y tiempo de carrera.
-4. **Ctrl+C** para detener; se guardan los resultados en `resultados_nadadores.txt` y `resultados_nadadores.csv`.
+4. **Ctrl+C** para detener; se guarda `resultados_nadadores.csv`. Si existe `tags_para_registro.csv`, se genera también `resultados_con_nadadores.csv` (cruce automático).
 
 **Uso programático:**
 ```python
@@ -105,6 +108,25 @@ if reader.connect():
     reader.disconnect()
     competencia.guardar_resultados()
 ```
+
+---
+
+### `cruzar_resultados.py` – Cruce EPC → nadador (con nombre opcional)
+
+Cruza los resultados de la carrera con la planilla de EPCs y genera **`resultados_con_nadadores.csv`** con: posición, EPC, **nombre** (opcional), número corredor, categoría, género, distancia, hora llegada, tiempo carrera, antena, rssi, edades.
+
+- **Planilla**: `tags_para_registro.csv` (de generar_epcs) — obligatoria para el cruce.
+- **Nombres (opcional)**: Si existe **`nombres_nadadores.csv`** con columnas `epc` y `nombre`, cada EPC se asocia al nombre del nadador y se incluye en la columna **nombre** del CSV de salida. Así puedes cargar un listado EPC → nombre (ej. inscritos) y que el cruce lo use.
+- **Integrado**: Al guardar resultados, `rfid_nadadores.py` ejecuta el cruce si existe `tags_para_registro.csv`; si además existe `nombres_nadadores.csv`, la salida incluye el nombre.
+- **Manual**: `python cruzar_resultados.py`.
+
+**Formato `nombres_nadadores.csv`:**
+```csv
+epc,nombre
+E28011900000000000000001,María García
+E28011910000000000000002,Carlos López
+```
+EPC puede ir con o sin espacios; se normaliza al cruzar.
 
 ---
 
@@ -139,8 +161,8 @@ python --version  # Verificar 3.6+
 3. Ejecuta `python rfid_nadadores.py`.
 4. Cuando estés listo (p. ej. al dar la salida), **pulsa Enter** para marcar el punto cero.
 5. Los nadadores pasan por las antenas; se registran posición, EPC, hora de llegada y tiempo de carrera.
-6. **Ctrl+C** para finalizar; se guardan `resultados_nadadores.txt` y `resultados_nadadores.csv`.
-7. Revisa los archivos: incluyen inicio (punto cero) y, por cada nadador, hora de llegada y tiempo de carrera en segundos.
+6. **Ctrl+C** para finalizar; se guarda `resultados_nadadores.csv`. Si existe `tags_para_registro.csv`, se genera también **`resultados_con_nadadores.csv`** (con nombre si existe `nombres_nadadores.csv`).
+7. Revisa los archivos. Para ver **qué nadador es** cada EPC: usa `resultados_con_nadadores.csv` (cruce con la planilla) o ejecuta `python cruzar_resultados.py` a mano.
 
 ---
 
@@ -154,22 +176,22 @@ python --version  # Verificar 3.6+
 🥇 POSICIÓN 2: EPC=E28011910000000000000002 | Antena=2 | Llegada: 14:23:46.789 | Tiempo carrera: 34.122 s
 ```
 
-**Archivo `resultados_nadadores.txt`:**
-```
-RESULTADOS DE COMPETENCIA
-Inicio (punto cero): 2025-02-22 14:23:12.667
-============================================================
-1. EPC: E28011900000000000000001 | Hora llegada: 14:23:45.123 | Antena: 1 | Tiempo carrera: 32.456 s
-2. EPC: E28011910000000000000002 | Hora llegada: 14:23:46.789 | Antena: 2 | Tiempo carrera: 34.122 s
-```
-
-**Archivo `resultados_nadadores.csv`** (para Excel o hojas de cálculo):
+**Archivo `resultados_nadadores.csv`:**
 ```csv
 inicio_punto_cero,2025-02-22 14:23:12.667
 posicion,epc,hora_llegada,tiempo_carrera_s,antena,rssi
 1,E28011900000000000000001,14:23:45.123,32.456,1,-50
 2,E28011910000000000000002,14:23:46.789,34.122,2,-48
 ```
+
+**Archivo `resultados_con_nadadores.csv`** (si existe planilla `tags_para_registro.csv`; columna **nombre** si existe `nombres_nadadores.csv`):
+```csv
+inicio_punto_cero,2025-02-22 14:23:12.667
+posicion,epc,nombre,numero_corredor,categoria_nombre,genero,distancia,hora_llegada,tiempo_carrera_s,antena,rssi,edad_min,edad_max
+1,E2801190...,María García,1,Infantil A,Femenino,2000,14:23:45.123,32.456,1,-50,8,9
+2,E2801191...,Carlos López,2,Juvenil A,Masculino,2000,14:23:46.789,34.122,2,-48,12,13
+```
+Con este archivo sabes **qué nadador es** cada EPC (nombre, número, categoría, género, distancia). La columna **nombre** se rellena si tienes `nombres_nadadores.csv` (epc, nombre).
 
 El **tiempo de carrera** de cada nadador es el número de segundos desde el punto cero hasta la detección de su tag.
 
@@ -206,9 +228,23 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 
 ---
 
+## Archivos generados (resumen)
+
+| Origen | Archivos |
+|--------|----------|
+| **rfid_nadadores** | `resultados_nadadores.csv` |
+| **rfid_nadadores + planilla** | `resultados_con_nadadores.csv` (EPC, nombre si hay `nombres_nadadores.csv`, número, categoría, género, distancia, tiempos) |
+| **cruzar_resultados** | `resultados_con_nadadores.csv` (mismo; opcionalmente usa `nombres_nadadores.csv`) |
+| **generar_epcs** | `tags_para_registro.csv`, `tags_completo.json`, `epcs_para_writer.txt` (solo lista de EPCs para el writer) |
+
+---
+
 ## Otros programas del proyecto
 
-- **Generador de EPCs** (`generar_epcs.py`): Crea códigos EPC por categoría/género/distancia para programar tags. Exporta **TXT** (para writer), **CSV** (registro) y **JSON** (backup). Ver **README_EPC_GENERATION.md** para uso completo.
+- **Generador de EPCs** (`generar_epcs.py`): Crea códigos EPC por categoría/género/distancia para programar tags. Exporta **TXT**, **CSV** y **JSON**. Ver **README_EPC_GENERATION.md**.
+- **Cruce de resultados** (`cruzar_resultados.py`): Cruce resultados de carrera con planilla de EPCs; se ejecuta solo o desde rfid_nadadores al guardar.
+
+---
 
 ## Referencias
 
