@@ -1,1 +1,3 @@
-pyserial>=3.5
+# Sistema RFID para nadadores (R300 YRM200 RFID reader module)
+# Python 3.6+ requerido.
+# No hay dependencias externas: solo biblioteca estándar (socket, etc.).
