@@ -150,7 +150,7 @@ Cada EPC tiene **24 caracteres hexadecimales** (12 bytes):
 | Reserved  | 2      | 00 |
 | Checksum  | 2      | XOR de los bytes anteriores |
 
-La **distancia** va codificada en el EPC, por eso puedes registrar varias carreras (distancias) con el mismo punto cero y separar resultados por la columna **distancia** en `resultados_con_nadadores.csv` (ver README.md).
+La **distancia** va codificada en el EPC, por eso puedes registrar varias carreras (distancias) con el mismo punto cero y separar resultados por la columna **distancia** en `resultados_con_nadadores.csv` (ver README.md). El **prefijo_evento** (parte Año/evento en el EPC) podría usarse en el futuro como identificador de evento si se amplía el sistema para varios eventos con distinto punto cero cada uno.
 
 ---
 

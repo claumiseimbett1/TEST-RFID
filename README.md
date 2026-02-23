@@ -224,6 +224,8 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 - **Duplicados**: Se ignora la segunda y siguientes detecciones del mismo EPC.
 - **Hora**: Usa NTP en el PC para que los tiempos sean coherentes.
 - **Varias distancias en un registro**: Puedes tener varias carreras (p. ej. 2K y 3K) con el **mismo punto cero** en una sola sesión; el EPC incluye la distancia. En `resultados_con_nadadores.csv` la columna **distancia** permite filtrar por carrera.
+- **Un solo evento**: El sistema está pensado para **un evento por sesión**: un único punto cero (hora de salida). Varias distancias comparten ese mismo inicio y se separan por la columna `distancia` en el CSV.
+- **Ampliación futura (varios eventos)**: Se podría extender para manejar varios eventos en la misma jornada: cada evento tendría su propio punto cero (hora de salida) y en el EPC ya existe un campo (`prefijo_evento` en el generador, codificado en el EPC) que podría usarse como identificador de evento. Así, cada tag indicaría a qué evento pertenece y el programa podría asignar el tiempo de carrera usando el punto cero correspondiente a ese evento. No está implementado en la versión actual.
 
 ---
 
