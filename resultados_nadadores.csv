@@ -1,2 +1,4 @@
-inicio_punto_cero,2026-02-27 21:19:19.673
+inicio_punto_cero,2026-03-05 08:36:47.797
 posicion,epc,hora_llegada,tiempo_carrera_s,antena,rssi
+1,000000000000000000000003,08:36:47.797,0.000,3,-69
+2,000002,08:36:47.797,0.000,5,-13
