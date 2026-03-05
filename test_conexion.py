@@ -40,10 +40,19 @@ def main():
                 print("[Conexión cerrada por el lector]")
                 break
 
-            # Intentar mostrar como texto; si no, en hexadecimal
+            # Tramas R300 YRM200 empiezan por 0xA0: tratarlas siempre como binario
+            if len(data) >= 4 and data[0] == 0xA0:
+                hex_str = " ".join(f"{b:02X}" for b in data)
+                print(f"[HEX] [{len(data)} bytes] {hex_str}", flush=True)
+                lon, reader_id, cmd = data[1], data[2], data[3]
+                nombre_cmd = CMD_NOMBRES.get(cmd, "Otro")
+                print(f"  → R300: Len={lon}, ReaderId={reader_id}, Cmd=0x{cmd:02X} ({nombre_cmd})")
+                continue
+
+            # Resto: intentar como texto; si hay caracteres de reemplazo (binario mal decodificado), mostrar HEX
             try:
                 texto = data.decode("utf-8", errors="replace").strip()
-                if texto:
+                if texto and "\ufffd" not in texto:
                     print(f"[TEXTO] {texto}", flush=True)
                     continue
             except Exception:
@@ -51,12 +60,6 @@ def main():
 
             hex_str = " ".join(f"{b:02X}" for b in data)
             print(f"[HEX] [{len(data)} bytes] {hex_str}", flush=True)
-
-            # Trama R300 YRM200: [0xA0][Len][ReaderId][Cmd][Data...][Checksum]
-            if len(data) >= 4 and data[0] == 0xA0:
-                lon, reader_id, cmd = data[1], data[2], data[3]
-                nombre_cmd = CMD_NOMBRES.get(cmd, "Otro")
-                print(f"  → R300: Len={lon}, ReaderId={reader_id}, Cmd=0x{cmd:02X} ({nombre_cmd})")
 
     except socket.error as e:
         print(f"✗ Error de conexión: {e}")

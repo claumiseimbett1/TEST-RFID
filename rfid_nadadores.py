@@ -61,8 +61,11 @@ class RFIDReader:
     
     @staticmethod
     def checksum(data: bytes) -> int:
-        """Calcular checksum (XOR de todos los bytes)"""
-        return sum(data) & 0xFF
+        """Calcular checksum (XOR de todos los bytes). Algunos lectores R300 usan otro algoritmo."""
+        result = 0
+        for b in data:
+            result ^= b
+        return result & 0xFF
     
     def send_command(self, cmd: int, data: bytes = b'', reader_id: int = 0xFF):
         """Enviar comando al lector"""
@@ -78,8 +81,12 @@ class RFIDReader:
         if len(frame) < 5 or frame[0] != self.HEADER:
             return None
         
-        # Validar checksum
-        if self.checksum(frame[:-1]) != frame[-1]:
+        # Validar checksum (algunos R300 usan otro algoritmo; config.SKIP_CHECKSUM = True para omitir)
+        try:
+            from config import SKIP_CHECKSUM
+        except ImportError:
+            SKIP_CHECKSUM = False
+        if not SKIP_CHECKSUM and self.checksum(frame[:-1]) != frame[-1]:
             print("⚠ Checksum inválido")
             return None
         
@@ -353,6 +360,7 @@ if __name__ == "__main__":
     # Punto cero: el usuario define cuándo empieza la carrera
     input("Pulsa Enter para iniciar la carrera (punto cero)... ")
     competencia.iniciar_carrera()
+    print("Cada llegada se muestra en consola (posición, EPC, antena, hora, tiempo carrera). Para finalizar y guardar: Ctrl+C\n")
 
     try:
         # Leer tags y registrar llegadas
