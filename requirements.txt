@@ -1,5 +1,9 @@
-# Sistema RFID para nadadores (R300 YRM200 RFID reader module)
-# Python 3.6+ requerido.
-# Dependencias de ejecución: solo biblioteca estándar (socket, etc.).
+# Sistema RFID Nadadores - R300 YRM200
+# Python 3.6+
+
+# Reporte de totales en PDF (generar_epcs.py)
+fpdf2>=2.7.0
+
 # Tests (opcional): pytest
-#   pip install pytest
+# pip install pytest && python -m pytest tests/ -v
+# pytest>=7.0.0

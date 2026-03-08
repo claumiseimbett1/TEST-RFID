@@ -5,6 +5,7 @@ Genera un CSV con posición, EPC, nombre (opcional), tiempo y datos del nadador.
 Si existe nombres_nadadores.csv (columnas epc, nombre), se incluye el nombre en la salida.
 """
 import csv
+import io
 
 # Archivos por defecto
 PLANILLA_CSV = "tags_para_registro.csv"
@@ -14,24 +15,44 @@ SALIDA_CSV = "resultados_con_nadadores.csv"
 
 
 def _normalizar_epc(epc: str) -> str:
-    """EPC sin espacios y en mayúsculas para comparar."""
-    return (epc or "").replace(" ", "").strip().upper()
+    """EPC sin espacios, mayúsculas; si tiene más de 24 hex se usan los últimos 24 (ej. 00E280... → E280...)."""
+    s = (epc or "").replace(" ", "").strip().upper()
+    s = "".join(c for c in s if c in "0123456789ABCDEF")
+    if len(s) > 24:
+        s = s[-24:]
+    return s
+
+
+def _leer_archivo_texto(archivo: str) -> str:
+    """Lee el archivo probando utf-8, cp1252 y latin-1 (p. ej. CSV de Excel en Windows)."""
+    with open(archivo, "rb") as f:
+        raw = f.read()
+    for enc in ("utf-8", "cp1252", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
 
 
 def _cargar_nombres_por_epc(archivo: str) -> dict:
-    """Carga archivo CSV con columnas epc (o epc_formateado) y nombre. Retorna dict EPC_normalizado -> nombre."""
+    """Carga archivo CSV con columnas epc y nombre. Acepta BOM y variantes de nombres (EPC, nombre_nadador)."""
     out = {}
     try:
-        with open(archivo, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            if not reader.fieldnames:
-                return out
-            for row in reader:
-                epc = row.get("epc") or row.get("epc_formateado") or ""
-                nombre = row.get("nombre") or row.get("nombre_nadador") or ""
-                key = _normalizar_epc(epc)
-                if key and nombre:
-                    out[key] = nombre.strip()
+        contenido = _leer_archivo_texto(archivo)
+        reader = csv.DictReader(io.StringIO(contenido))
+        if not reader.fieldnames:
+            return out
+        # Mapa nombre normalizado (sin BOM, minúsculas) -> clave real del CSV
+        keys = {k.strip().lstrip("\ufeff").lower(): k for k in reader.fieldnames}
+        col_epc = keys.get("epc") or keys.get("epc_formateado") or reader.fieldnames[0]
+        col_nombre = keys.get("nombre") or keys.get("nombre_nadador") or (reader.fieldnames[1] if len(reader.fieldnames) > 1 else "")
+        for row in reader:
+            epc = (row.get(col_epc) or "").strip()
+            nombre = (row.get(col_nombre) or "").strip() if col_nombre else ""
+            key = _normalizar_epc(epc)
+            if key and nombre:
+                out[key] = nombre
     except FileNotFoundError:
         pass
     return out
@@ -49,16 +70,18 @@ def cruzar_resultados(
     con posición, EPC, nombre (si existe), número corredor, categoría, género, distancia, tiempos.
     """
     try:
-        with open(planilla_csv, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            if not reader.fieldnames:
-                return False
-            planilla = list(reader)
+        contenido = _leer_archivo_texto(planilla_csv)
+        reader = csv.DictReader(io.StringIO(contenido))
+        if not reader.fieldnames:
+            return False
+        planilla = list(reader)
     except FileNotFoundError:
         return False
 
     # Nombres por EPC (archivo opcional)
     lookup_nombres = _cargar_nombres_por_epc(nombres_csv) if nombres_csv else {}
+    if lookup_nombres:
+        print(f"  Nombres cargados: {len(lookup_nombres)} desde {nombres_csv}")
 
     # Diccionario EPC normalizado -> datos del nadador (planilla)
     lookup = {}
@@ -80,15 +103,14 @@ def cruzar_resultados(
         return False
 
     try:
-        with open(resultados_csv, encoding="utf-8") as f:
-            lineas = f.readlines()
+        contenido = _leer_archivo_texto(resultados_csv)
     except FileNotFoundError:
         return False
 
     # Parsear CSV: puede tener primera fila "inicio_punto_cero,..."
     filas_resultados = []
     inicio_punto_cero = None
-    r = csv.reader(lineas)
+    r = csv.reader(io.StringIO(contenido))
     for row in r:
         if not row:
             continue

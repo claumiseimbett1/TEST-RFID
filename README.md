@@ -5,10 +5,10 @@ Software para el control y registro de tiempos en natación usando **RFID UHF** 
 **Salidas:** Se usa **CSV** para resultados y planillas (Excel, cruce) y **JSON** para backup con metadata. El único **TXT** es la lista de EPCs para el writer (`epcs_para_writer.txt`), que muchos equipos esperan en ese formato.
 
 **Resumen rápido:**
-- **`test_conexion.py`**: Prueba de conexión al lector; muestra datos [TEXTO]/[HEX].
-- **`rfid_nadadores.py`**: Registra llegadas por EPC y **exporta en CSV** (`resultados_nadadores.csv`). Si existe `tags_para_registro.csv`, genera **`resultados_con_nadadores.csv`** (con nombre si hay `nombres_nadadores.csv`).
-- **`cruzar_resultados.py`**: Cruza resultados con la planilla y opcionalmente con `nombres_nadadores.csv`; salida en **CSV**.
-- **`generar_epcs.py`**: Generador de EPCs; tú defines hasta 4 distancias, el nº de nadadores en cada una y F/M. Exporta **CSV** (planilla), **JSON** (backup) y **TXT** para el writer. Ver **README_EPC_GENERATION.md**.
+- **`test_conexion.py`**: Prueba de conexión al lector. Configura potencia 30 dBm, rota solo las antenas configuradas en `ANTENNAS_ACTIVAS` (ej. 3 y 4) cada 0,5 s y envía inventario (0x89 + 0x80/0x90). Muestra **"Tag leído: EPC=... Ant=X RSSI=X dBm"**. Útil para comprobar que el lector lee antes de la carrera.
+- **`rfid_nadadores.py`**: Registra llegadas por EPC (ignora EPCs no válidos como 000000) y **exporta en CSV** (`resultados_nadadores.csv`). Asigna la antena correcta por orden de llegada. Si existe `tags_para_registro.csv`, genera **`resultados_con_nadadores.csv`** (con nombre si hay `nombres_nadadores.csv`).
+- **`cruzar_resultados.py`**: Cruza resultados con la planilla y con `nombres_nadadores.csv` (nombres por EPC). Soporta CSV en UTF-8, cp1252 o latin-1. Normaliza EPC (espacios, prefijo 00). Salida en **CSV**.
+- **`generar_epcs.py`**: Generador de EPCs; defines distancias y femeninos/masculinos por categoría. Exporta **CSV**, **JSON**, **TXT** para el writer y **PDF** con reporte de totales. Ver **README_EPC_GENERATION.md**.
 
 ## Hardware
 
@@ -43,20 +43,35 @@ Software para el control y registro de tiempos en natación usando **RFID UHF** 
 
 ### `config.py` – Configuración del lector
 
-Define **`LECTOR_IP`** y **`LECTOR_PORT`** en un solo lugar. Usado por `test_conexion.py` y `rfid_nadadores.py`. Edita aquí la IP y el puerto de tu R300 YRM200 (por defecto: 192.168.0.178, 4001).
+| Parámetro | Descripción |
+|-----------|-------------|
+| `LECTOR_IP` | IP del R300 YRM200 (ej. 192.168.0.178). |
+| `LECTOR_PORT` | Puerto TCP (4001 o 6000 según el equipo). |
+| `SKIP_CHECKSUM` | Si el lector usa otro checksum, pon `True` para no validarlo. |
+| `SEND_START_INVENTORY` | `True` = enviar al conectar comandos de inventario (0x74 antena, 0x76 potencia, 0x89, 0x80/0x90). |
+| `NUM_ANTENNAS` | Número de antenas del lector (4 en R300 YRM200). |
+| `ANTENNAS_ACTIVAS` | Números de antena 1-4 (puertos del lector): `[1,2,3,4]` = las 4; `[3, 4]` = solo antenas 3 y 4. |
+| `MAPEO_ANTENAS` | Diccionario para que lo mostrado coincida con la antena física. `{}` = sin cambio. Si en tu equipo salen al revés: `{3: 4, 4: 3}`. |
 
 ---
 
 ### `test_conexion.py` – Prueba de conexión
 
-Verifica la conexión TCP/IP con el lector y muestra los datos recibidos. Cada línea se etiqueta como **[TEXTO]** o **[HEX]**; si la trama empieza con `0xA0`, muestra un resumen (Len, ReaderId, Cmd). Útil para comprobar red y que lleguen tags.
+Comprueba que el lector responde y lee tags. **Recomendado ejecutarlo antes de la carrera.**
+
+Al conectar, el script:
+1. Fija **potencia RF a 30 dBm** (0x76).
+2. Envía **antena de trabajo** (0x74) e **inventario en tiempo real** (0x89 con byte Channel 0xFF).
+3. Envía también **inventario a buffer** (0x80) y **lectura del buffer** (0x90).
+4. Cada **0,5 s** rota por las antenas definidas en `ANTENNAS_ACTIVAS` (ej. solo 3 y 4) y repite 0x74 + 0x89 + 0x80/0x90.
+
+Cuando el lector detecta un tag, aparece **"Tag leído: EPC=... Ant=X RSSI=X dBm"** (Ant usa la antena de la rotación; el R300 suele reportar siempre 4 en la trama).
 
 **Uso:**
 ```bash
 python test_conexion.py
 ```
-
-Detener con **Ctrl+C**. La IP y el puerto se leen de `config.py`.
+Cierra el SDK del lector antes. Acerca un tag a la antena y espera unos segundos. Detener con **Ctrl+C**.
 
 ---
 
@@ -76,6 +91,8 @@ Sistema con clases para gestión de competencia y **cálculo del tiempo de carre
 **Características:**
 - Parsea tramas según protocolo R300 YRM200.
 - Extrae EPC (24 caracteres), antena, RSSI, timestamp.
+- **Ignora EPCs no válidos** (ej. 000000 o solo ceros) para no registrar falsas llegadas.
+- Asigna la **antena correcta** por orden de llegada (la que estaba activa cuando se leyó el tag); usa `MAPEO_ANTENAS` si en tu equipo los números salen al revés.
 - Registra solo la primera detección de cada EPC (evita duplicados).
 - Guarda resultados en **CSV** (mismo nombre base): hora de llegada y, si hay punto cero, tiempo de carrera en segundos.
 - Al ejecutar como script, pide **Enter para iniciar la carrera** y luego lee tags hasta Ctrl+C.
@@ -113,33 +130,46 @@ if reader.connect():
 
 ### `cruzar_resultados.py` – Cruce EPC → nadador (con nombre opcional)
 
-Cruza los resultados de la carrera con la planilla de EPCs y genera **`resultados_con_nadadores.csv`** con: posición, EPC, **nombre** (opcional), número corredor, categoría, género, distancia, hora llegada, tiempo carrera, antena, rssi, edades y **`epc_en_planilla`** (sí/no). Si algún EPC no está en la planilla, la fila se escribe igual con `epc_en_planilla=no` y al final se muestra un aviso con la lista de EPCs no encontrados (para filtrar en Excel por "no").
+Cruza los resultados de la carrera con la planilla de EPCs y genera **`resultados_con_nadadores.csv`** con: posición, EPC, **nombre** (si existe `nombres_nadadores.csv`), número corredor, categoría, género, distancia, hora llegada, tiempo carrera, antena, rssi, edades y **`epc_en_planilla`** (sí/no).
 
 - **Planilla**: `tags_para_registro.csv` (de generar_epcs) — obligatoria para el cruce.
-- **Nombres (opcional)**: Si existe **`nombres_nadadores.csv`** con columnas `epc` y `nombre`, cada EPC se asocia al nombre del nadador y se incluye en la columna **nombre** del CSV de salida. Así puedes cargar un listado EPC → nombre (ej. inscritos) y que el cruce lo use.
-- **Integrado**: Al guardar resultados, `rfid_nadadores.py` ejecuta el cruce si existe `tags_para_registro.csv`; si además existe `nombres_nadadores.csv`, la salida incluye el nombre.
+- **Nombres**: Si existe **`nombres_nadadores.csv`** con columnas `epc` y `nombre`, se cargan los nombres y se muestra "Nombres cargados: N desde nombres_nadadores.csv". La columna **nombre** del CSV de salida se rellena por EPC. Acepta cabeceras con BOM y variantes (EPC, nombre_nadador). Los CSV pueden estar en **UTF-8, cp1252 o latin-1** (p. ej. exportados desde Excel en Windows).
+- **Normalización de EPC**: Se quitan espacios; si el EPC tiene más de 24 caracteres hex (ej. prefijo `00` en resultados del lector), se usan los últimos 24 para el cruce, así coinciden con la planilla y con `nombres_nadadores.csv`.
+- **Integrado**: Al guardar resultados, `rfid_nadadores.py` ejecuta el cruce si existe `tags_para_registro.csv`.
 - **Manual**: `python cruzar_resultados.py`.
 
 **Formato `nombres_nadadores.csv`:**
 ```csv
 epc,nombre
-E28011900000000000000001,María García
-E28011910000000000000002,Carlos López
+E2 80 07 EA 02 01 01 00 00 01 00 8C,Clara Méndez
+E28007EA020502000001008B,Camila Herrera
 ```
-EPC puede ir con o sin espacios; se normaliza al cruzar.
+EPC puede ir **con o sin espacios**; se normaliza al cruzar. Si en resultados el EPC viene con prefijo `00` (26 caracteres), se ajusta automáticamente.
 
 ---
 
 ## Configuración del lector
 
-1. **IP del lector**: Configuración del fabricante o IP estática (ej. 192.168.0.x). Ponla en `config.py` como `LECTOR_IP`.
-2. **Puerto TCP**: Por defecto 4001 en `config.py` (`LECTOR_PORT`). Algunos equipos usan 6000.
-3. **Modo**: El lector/SDK debe estar enviando datos por TCP (modo inventario continuo o equivalente).
+1. **IP y puerto**: En `config.py` ajusta `LECTOR_IP` y `LECTOR_PORT` (por defecto 4001; algunos R300 usan 6000).
+2. **SDK cerrado**: El lector acepta una sola conexión TCP. Cierra el programa del fabricante antes de usar `test_conexion.py` o `rfid_nadadores.py`.
+3. **Antenas**: Usa **números de antena 1-4** (puertos del lector). Si solo tienes conectadas las antenas 3 y 4: `ANTENNAS_ACTIVAS = [3, 4]`. Para las 4: `[1, 2, 3, 4]`. La rotación y lo que se guarda en CSV usan solo esas antenas.
+4. **Numeración de antena**: Si al pasar por la antena física 3 marca 4 (y al revés), en `config.py` pon `MAPEO_ANTENAS = {3: 4, 4: 3}`. Con `{}` no se cambia.
 
-| Parámetro   | Ejemplo       | Descripción           |
-|------------|---------------|------------------------|
-| LECTOR_IP  | 192.168.0.178 | IP del R300 YRM200     |
-| LECTOR_PORT| 4001          | Puerto TCP del lector |
+### Correcciones de protocolo R300 aplicadas
+
+Los scripts ya envían los comandos que exige el protocolo oficial del R300 YRM200:
+
+- **0x89 (inventario en tiempo real)** debe llevar **1 byte Channel** (se envía 0xFF). Sin ese byte el lector no devuelve tags.
+- **0x74 (set work antenna)**: Fija la antena de trabajo antes del inventario; sin ello el lector puede no leer.
+- **0x76 (set output power)**: Se envía 30 dBm al conectar para mejorar el alcance (rango 20–33 dBm).
+- **0x80 + 0x90**: Inventario a buffer y lectura del buffer; en algunos casos el lector responde mejor con esta secuencia.
+
+`test_conexion.py` aplica todo lo anterior y rota por las antenas configuradas en `ANTENNAS_ACTIVAS` cada 0,5 s; cuando lee un tag muestra **"Tag leído: EPC=... Ant=X RSSI=X dBm"**.
+
+**Si no se registran tags:**
+1. Cierra el SDK y ejecuta `python test_conexion.py`. Acerca el tag y espera varios segundos (rotación de antenas).
+2. Si no aparece "Tag leído", revisa IP/puerto en `config.py`, que el tag sea UHF Gen2 y que la antena esté bien conectada.
+3. Si con el SDK sí lee y con Python no, los scripts ya envían 0x74, 0x76, 0x89+Channel y 0x80/0x90; comprueba que usas la misma red y puerto que el SDK.
 
 ---
 
@@ -174,9 +204,9 @@ python -m pytest tests/ -v
 
 ## Flujo de trabajo para competencia
 
-1. Ajusta `LECTOR_IP` y `LECTOR_PORT` en `config.py`.
-2. Comprueba conexión: `python test_conexion.py` (debes ver [TEXTO] o [HEX] al pasar tags). Ctrl+C para salir.
-3. Ejecuta `python rfid_nadadores.py`.
+1. Ajusta `LECTOR_IP`, `LECTOR_PORT` y, si aplica, `ANTENNAS_ACTIVAS` en `config.py`.
+2. Comprueba que el lector lee: `python test_conexion.py`. Acerca un tag y verifica que aparezca **"Tag leído: EPC=..."**. Ctrl+C para salir.
+3. Cierra el SDK y ejecuta `python rfid_nadadores.py`.
 4. Cuando estés listo (p. ej. al dar la salida), **pulsa Enter** para marcar el punto cero.
 5. Los nadadores pasan por las antenas; se registran posición, EPC, hora de llegada y tiempo de carrera.
 6. **Ctrl+C** para finalizar; se guarda `resultados_nadadores.csv`. Si existe `tags_para_registro.csv`, se genera también **`resultados_con_nadadores.csv`** (con nombre si existe `nombres_nadadores.csv`).
@@ -218,8 +248,8 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 ## Notas importantes
 
 - **Punto cero**: Lo defines tú (Enter al ejecutar el script, o `competencia.iniciar_carrera()` en código). El SDK del lector solo envía datos por TCP; no tiene concepto de “inicio de carrera”.
-- **EPC**: 24 caracteres hexadecimales en este equipo.
-- **Antenas**: Si usas varias, define cuál corresponde a la línea de meta.
+- **EPC**: 24 caracteres hexadecimales en este equipo. Se ignoran EPCs no válidos (ej. 000000).
+- **Antenas**: Configura solo las que tengas conectadas (`ANTENNAS_ACTIVAS`). Usa `MAPEO_ANTENAS` si la numeración no coincide con los puertos físicos.
 - **RSSI**: Valor en dBm (negativo; ej. -50 dBm = señal fuerte).
 - **Duplicados**: Se ignora la segunda y siguientes detecciones del mismo EPC.
 - **Hora**: Usa NTP en el PC para que los tiempos sean coherentes.
@@ -232,13 +262,16 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 ## Troubleshooting
 
 **No se conecta**
-- Comprueba IP y puerto en `config.py`, ping al lector, firewall y que el lector/SDK esté enviando por TCP.
+- Comprueba IP y puerto en `config.py`, ping al lector, firewall. Cierra el SDK (solo una conexión TCP).
 
-**Recibe datos pero no parsea**
-- Ejecuta `test_conexion.py` y revisa si las tramas empiezan por `0xA0`. Puede haber variante de protocolo.
+**Recibe datos pero no aparece "Tag leído"**
+- `test_conexion.py` ya envía 0x74 (antena), 0x76 (30 dBm), 0x89+Channel y 0x80/0x90. Acerca el tag a la antena y espera varias rondas (rotación 4 antenas). Revisa que el tag sea UHF Gen2 y la región de frecuencia (FCC/ETSI) correcta.
 
-**Tags no detectados**
-- Modo inventario activo, potencia de antenas y tags UHF compatibles.
+**Tags no detectados en carrera (`rfid_nadadores.py`)**
+- Misma configuración que en test: potencia, `ANTENNAS_ACTIVAS` en `config.py`. Asegura que antes de la carrera `test_conexion.py` sí mostró "Tag leído" con ese tag.
+
+**Nombres no aparecen en resultados_con_nadadores.csv**
+- Comprueba que existe `nombres_nadadores.csv` con columnas `epc` y `nombre`. Al ejecutar `cruzar_resultados.py` debe salir "Nombres cargados: N desde nombres_nadadores.csv". Si los EPC en resultados tienen prefijo `00` (26 caracteres), el cruce los normaliza a 24 caracteres; no hace falta cambiar archivos.
 
 ---
 
@@ -256,7 +289,7 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 | **rfid_nadadores** | `resultados_nadadores.csv` |
 | **rfid_nadadores + planilla** | `resultados_con_nadadores.csv` (EPC, nombre si hay `nombres_nadadores.csv`, número, categoría, género, distancia, tiempos, epc_en_planilla) |
 | **cruzar_resultados** | `resultados_con_nadadores.csv` (mismo; opcionalmente usa `nombres_nadadores.csv`) |
-| **generar_epcs** | `tags_para_registro.csv`, `tags_completo.json`, `epcs_para_writer.txt` (solo lista de EPCs para el writer) |
+| **generar_epcs** | `tags_para_registro.csv`, `tags_completo.json`, `epcs_para_writer.txt`, `reporte_totales.pdf` (totales por categoría) |
 
 ---
 

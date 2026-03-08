@@ -1,0 +1,11 @@
+epc_formateado,numero_corredor,categoria_nombre,genero,distancia,edad_min,edad_max
+E2 80 07 EA 02 01 01 00 00 01 00 8C,1,Infantil A,Femenino,2000,8,9
+E2 80 07 EA 02 02 02 00 00 01 00 8C,1,Infantil B,Masculino,2000,10,11
+E2 80 07 EA 02 02 02 00 00 02 00 8F,2,Infantil B,Masculino,2000,10,11
+E2 80 07 EA 02 05 02 00 00 01 00 8B,1,Junior A,Masculino,2000,16,17
+E2 80 07 EA 02 05 02 00 00 02 00 88,2,Junior A,Masculino,2000,16,17
+E2 80 07 EA 02 06 01 00 00 01 00 8B,1,Junior B,Femenino,2000,18,19
+E2 80 07 EA 02 06 01 00 00 02 00 88,2,Junior B,Femenino,2000,18,19
+E2 80 07 EA 02 09 01 00 00 01 00 84,1,Masters A,Femenino,2000,30,39
+E2 80 07 EA 02 09 02 00 00 01 00 87,1,Masters A,Masculino,2000,30,39
+E2 80 07 EA 02 09 02 00 00 02 00 84,2,Masters A,Masculino,2000,30,39

@@ -358,7 +358,85 @@ class EPCGenerator:
                 f.write(f"{tag['epc']}\n")
         
         print(f"✓ EPCs para writer: {filename}")
-    
+
+    def _obtener_totales_por_genero_y_categoria(self):
+        """Calcula totales femeninos/masculinos global y por categoría."""
+        fem_por_cat = {}
+        masc_por_cat = {}
+        for t in self.tags_generados:
+            cat = t.get('categoria_nombre', '')
+            if t.get('genero_codigo') == 'F':
+                fem_por_cat[cat] = fem_por_cat.get(cat, 0) + 1
+            else:
+                masc_por_cat[cat] = masc_por_cat.get(cat, 0) + 1
+        total_f = sum(fem_por_cat.values())
+        total_m = sum(masc_por_cat.values())
+        categorias_orden = sorted(set(fem_por_cat.keys()) | set(masc_por_cat.keys()))
+        return fem_por_cat, masc_por_cat, total_f, total_m, categorias_orden
+
+    def exportar_reporte_totales_csv(self, filename: str = 'reporte_totales.csv'):
+        """Exporta un reporte CSV con totales globales: femeninos, masculinos y por categoría."""
+        import csv
+        fem_por_cat, masc_por_cat, total_f, total_m, categorias_orden = self._obtener_totales_por_genero_y_categoria()
+        with open(filename, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Categoría', 'Femeninos', 'Masculinos', 'Total'])
+            for cat in categorias_orden:
+                fem = fem_por_cat.get(cat, 0)
+                masc = masc_por_cat.get(cat, 0)
+                writer.writerow([cat, fem, masc, fem + masc])
+            writer.writerow(['TOTAL', total_f, total_m, total_f + total_m])
+        print(f"✓ Reporte totales CSV: {filename}")
+
+    def exportar_reporte_totales_pdf(self, filename: str = 'reporte_totales.pdf'):
+        """Exporta un reporte PDF con totales globales: femeninos, masculinos y por categoría."""
+        try:
+            from fpdf import FPDF
+        except ImportError:
+            print("⚠ Para generar el reporte en PDF instala: pip install fpdf2")
+            return
+        fem_por_cat, masc_por_cat, total_f, total_m, categorias_orden = self._obtener_totales_por_genero_y_categoria()
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font('Helvetica', 'B', 16)
+        pdf.cell(0, 10, 'Reporte de tags - Totales por categoría', ln=True, align='C')
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 8, f'Evento: {self.prefijo_evento}  |  Total tags: {len(self.tags_generados)}', ln=True, align='C')
+        pdf.ln(8)
+        pdf.set_font('Helvetica', 'B', 12)
+        pdf.cell(0, 8, 'Totales globales', ln=True)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, f'Femeninos: {total_f}  |  Masculinos: {total_m}  |  Total: {total_f + total_m}', ln=True)
+        pdf.ln(6)
+        pdf.set_font('Helvetica', 'B', 12)
+        pdf.cell(0, 8, 'Por categoría', ln=True)
+        pdf.set_font('Helvetica', '', 10)
+        col_w = (80, 35, 35, 35)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(col_w[0], 7, 'Categoría', border=1)
+        pdf.cell(col_w[1], 7, 'Femeninos', border=1)
+        pdf.cell(col_w[2], 7, 'Masculinos', border=1)
+        pdf.cell(col_w[3], 7, 'Total', border=1)
+        pdf.ln()
+        pdf.set_font('Helvetica', '', 10)
+        for cat in categorias_orden:
+            fem = fem_por_cat.get(cat, 0)
+            masc = masc_por_cat.get(cat, 0)
+            pdf.cell(col_w[0], 6, cat, border=1)
+            pdf.cell(col_w[1], 6, str(fem), border=1)
+            pdf.cell(col_w[2], 6, str(masc), border=1)
+            pdf.cell(col_w[3], 6, str(fem + masc), border=1)
+            pdf.ln()
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(col_w[0], 7, 'TOTAL', border=1)
+        pdf.cell(col_w[1], 7, str(total_f), border=1)
+        pdf.cell(col_w[2], 7, str(total_m), border=1)
+        pdf.cell(col_w[3], 7, str(total_f + total_m), border=1)
+        pdf.ln()
+        pdf.output(filename)
+        print(f"✓ Reporte totales PDF: {filename}")
+
     def imprimir_resumen(self):
         """Imprime resumen de tags generados"""
         print("\n" + "="*70)
@@ -689,13 +767,50 @@ def _pedir_femenino_masculino(total: int, etiqueta: str = ""):
         print("  Vuelve a ingresar las cantidades.\n")
 
 
+def _pedir_femeninos_y_masculinos_por_categoria(distancia: str):
+    """
+    Pide directamente cuántos femeninos y cuántos masculinos hay en cada categoría FECNA.
+    Retorna lista de (categoria, genero, cantidad) para generar_lote_carreras.
+    """
+    categorias_fecna = EPCGenerator.CATEGORIAS_FECNA
+    codigos = list(categorias_fecna.keys())
+    nombres = [categorias_fecna[cod][0] for cod in codigos]
+
+    print(f"\n  📋 {distancia} — Indica femeninos y masculinos por categoría (0 si no aplica):")
+
+    resultado = []
+    for codigo, nombre in zip(codigos, nombres):
+        while True:
+            inp_f = input(f"     ¿Cuántos femeninos de categoría {nombre}? ").strip()
+            if inp_f == "" or inp_f.isdigit():
+                f = int(inp_f) if inp_f.isdigit() else 0
+                if f >= 0:
+                    break
+            print("       ⚠ Escribe un número (0 o más).")
+        while True:
+            inp_m = input(f"     ¿Cuántos masculinos de categoría {nombre}? ").strip()
+            if inp_m == "" or inp_m.isdigit():
+                m = int(inp_m) if inp_m.isdigit() else 0
+                if m >= 0:
+                    break
+            print("       ⚠ Escribe un número (0 o más).")
+        if f > 0:
+            resultado.append((codigo, 'F', f))
+        if m > 0:
+            resultado.append((codigo, 'M', m))
+
+    total = sum(c for _, _, c in resultado)
+    print(f"     → Total {distancia}: {total} nadadores ✓")
+    return resultado
+
+
 if __name__ == "__main__":
     print("╔═══════════════════════════════════════════════════════════════════╗")
     print("║  GENERADOR DE CÓDIGOS EPC - COMPETENCIAS DE NATACIÓN            ║")
     print("║  Sistema FECNA - Tags RFID UHF                                  ║")
     print("╚═══════════════════════════════════════════════════════════════════╝")
 
-    print("\n🎯 Define el número de nadadores en cada distancia (hasta 4) y luego F/M por carrera.\n")
+    print("\n🎯 Indica distancias (hasta 4) y luego, por cada una, cuántos femeninos y masculinos hay en cada categoría.\n")
 
     while True:
         num_inp = input("¿Cuántas distancias (carreras) simultáneas? (1 a 4): ").strip()
@@ -705,7 +820,7 @@ if __name__ == "__main__":
                 break
         print("  ⚠ Escribe un número entre 1 y 4.")
     distancias_validas = ('1K', '2K', '3K', '5K')
-    config_dist = []
+    config_carreras = []
     for i in range(num_distancias):
         print(f"\n--- Carrera {i + 1} ---")
         while True:
@@ -713,39 +828,17 @@ if __name__ == "__main__":
             if d in distancias_validas:
                 break
             print(f"  ⚠ Usa una de: 1K, 2K, 3K, 5K")
-        while True:
-            inp_t = input(f"  Número de nadadores en {d}: ").strip()
-            total_dist = int(inp_t) if inp_t.isdigit() else 0
-            if total_dist > 0:
-                break
-            print("  ⚠ Escribe un número mayor que 0.")
-        while True:
-            inp_f = input(f"  De esos {total_dist}, número de FEMENINOS [{total_dist // 2}]: ").strip()
-            inp_m = input(f"  De esos {total_dist}, número de MASCULINOS [{total_dist - total_dist // 2}]: ").strip()
-            default_f = total_dist // 2
-            default_m = total_dist - default_f
-            cant_f = int(inp_f) if inp_f.isdigit() else default_f
-            cant_m = int(inp_m) if inp_m.isdigit() else default_m
-            if cant_f + cant_m == total_dist:
-                print(f"  → {d}: {total_dist} nadadores (F: {cant_f}, M: {cant_m}) ✓")
-                config_dist.append({
-                    'distancia': d,
-                    'cantidad': total_dist,
-                    'cantidad_femenino': cant_f,
-                    'cantidad_masculino': cant_m,
-                })
-                break
-            print(f"  ⚠ Femenino + Masculino debe sumar {total_dist}. Vuelve a ingresar.")
-    total_nadadores = sum(c['cantidad'] for c in config_dist)
+        categorias_lista = _pedir_femeninos_y_masculinos_por_categoria(d)
+        config_carreras.append({
+            'distancia': d,
+            'categorias': categorias_lista
+        })
+
+    total_nadadores = sum(cant for cfg in config_carreras for _, _, cant in cfg['categorias'])
     print(f"\n📊 Total de nadadores: {total_nadadores}")
 
     generador = EPCGenerator(prefijo_evento="2026")
-    config = generador.generar_distribucion_automatica(
-        total_nadadores=total_nadadores,
-        distancias_config=config_dist,
-        usar_todas_categorias=True
-    )
-    generador.generar_lote_carreras(config)
+    generador.generar_lote_carreras(config_carreras)
 
     # Mostrar resultados
     generador.imprimir_resumen()
@@ -756,17 +849,35 @@ if __name__ == "__main__":
     generador.exportar_para_writer('epcs_para_writer.txt')
     generador.exportar_csv('tags_para_registro.csv')
     generador.exportar_json('tags_completo.json')
+    generador.exportar_reporte_totales_pdf('reporte_totales.pdf')
     
     print("\n✅ Proceso completado!")
     total_gen = len(generador.tags_generados)
     print(f"📊 Total de tags generados: {total_gen}")
 
-    # Verificación: Femenino + Masculino = Total
-    cuenta_f = sum(1 for t in generador.tags_generados if t.get('genero_codigo') == 'F')
-    cuenta_m = sum(1 for t in generador.tags_generados if t.get('genero_codigo') == 'M')
-    suma_gen = cuenta_f + cuenta_m
-    ok = "✓" if suma_gen == total_gen else "✗"
-    print(f"\n📋 Verificación género: Femenino ({cuenta_f}) + Masculino ({cuenta_m}) = {suma_gen} {ok}")
+    # Resumen: total femeninos/masculinos global y por categoría
+    fem_por_cat = {}
+    masc_por_cat = {}
+    for t in generador.tags_generados:
+        cat = t.get('categoria_nombre', '')
+        if t.get('genero_codigo') == 'F':
+            fem_por_cat[cat] = fem_por_cat.get(cat, 0) + 1
+        else:
+            masc_por_cat[cat] = masc_por_cat.get(cat, 0) + 1
+    total_f = sum(fem_por_cat.values())
+    total_m = sum(masc_por_cat.values())
+
+    print("\n" + "="*70)
+    print("📊 RESUMEN GLOBAL")
+    print("="*70)
+    print(f"\n  FEMENINOS total: {total_f}")
+    for cat in sorted(fem_por_cat.keys()):
+        print(f"    • {cat}: {fem_por_cat[cat]}")
+    print(f"\n  MASCULINOS total: {total_m}")
+    for cat in sorted(masc_por_cat.keys()):
+        print(f"    • {cat}: {masc_por_cat[cat]}")
+    print(f"\n  TOTAL GLOBAL: {total_f + total_m}")
+    print("="*70)
 
     # Mostrar distribución por distancia
     por_dist = {}
@@ -780,9 +891,10 @@ if __name__ == "__main__":
             print(f"   • {dist}: {cant} tags")
     
     print("\n💡 Archivos generados:")
-    print("   • epcs_para_writer.txt  → Copiar al writer RFID")
+    print("   • epcs_para_writer.txt   → Copiar al writer RFID")
     print("   • tags_para_registro.csv → Para imprimir y registro")
     print("   • tags_completo.json     → Backup con metadata completa")
+    print("   • reporte_totales.pdf   → Totales globales femeninos/masculinos por categoría")
     
     print("\n" + "="*70)
     print("CATEGORÍAS FECNA DISPONIBLES:")
@@ -792,6 +904,6 @@ if __name__ == "__main__":
     
     print("\n" + "="*70)
     print("💡 TIPS:")
-    print("   • Define hasta 4 distancias; en cada una, nº de nadadores y luego F/M (deben sumar)")
+    print("   • Define hasta 4 distancias; en cada una indica cuántos femeninos y masculinos por categoría")
     print("   • Para control por código: usa EPCGenerator y generar_distribucion_automatica()")
     print("="*70)
