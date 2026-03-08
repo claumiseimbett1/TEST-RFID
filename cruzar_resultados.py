@@ -181,6 +181,14 @@ def cruzar_resultados(
         else:
             print("     Revisa la columna 'epc_en_planilla' en el CSV (filtrar por 'no').")
 
+    # Clasificación por tiempo (CSV + PDF)
+    try:
+        from clasificacion import main as main_clasificacion
+        if main_clasificacion(entrada=salida_csv):
+            print("  Clasificación (general, por categoría, por sexo): CSV y PDF generados.")
+    except Exception:
+        pass
+
     return True
 
 

@@ -1,8 +1,10 @@
 # Sistema RFID Nadadores - R300 YRM200
 # Python 3.6+
 
-# Reporte de totales en PDF (generar_epcs.py)
+# PDF (generar_epcs.py, clasificacion.py)
 fpdf2>=2.7.0
+# Excel (clasificacion.py)
+openpyxl>=3.0.0
 
 # Tests (opcional): pytest
 # pip install pytest && python -m pytest tests/ -v

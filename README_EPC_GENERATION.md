@@ -402,8 +402,10 @@ Al finalizar, el programa genera **tres archivos** en formatos adecuados:
 | Formato | Archivo | Contenido |
 |--------|---------|-----------|
 | **TXT** | `epcs_para_writer.txt` | Un EPC por línea, sin espacios; para copiar al writer RFID. |
-| **CSV** | `tags_para_registro.csv` | Tabla para Excel / cruce: `epc_formateado`, numero_corredor, categoria_nombre, genero, distancia (metros), edad_min, edad_max. Usado por `cruzar_resultados.py`. |
+| **CSV** | `tags_para_registro.csv` | Planilla: `epc_formateado`, `numero_corredor`, `categoria_nombre`, `genero`, `distancia`, `edad_min`, `edad_max`. Usado por `cruzar_resultados.py`. |
 | **JSON** | `tags_completo.json` | Backup con metadata completa del evento y de cada tag. |
+
+Para la **estructura exacta** del CSV y cómo editarlo a mano (p. ej. añadir columna `nombre`), ver en **README.md** la sección *Estructura de tags_para_registro.csv*.
 
 En modo interactivo los archivos se generan con esos nombres en el directorio actual. Al terminar se muestra la **verificación de género**: Femenino (X) + Masculino (Y) = Total ✓.
 

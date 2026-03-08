@@ -5,10 +5,11 @@ Software para el control y registro de tiempos en natación usando **RFID UHF** 
 **Salidas:** Se usa **CSV** para resultados y planillas (Excel, cruce) y **JSON** para backup con metadata. El único **TXT** es la lista de EPCs para el writer (`epcs_para_writer.txt`), que muchos equipos esperan en ese formato.
 
 **Resumen rápido:**
-- **`test_conexion.py`**: Prueba de conexión al lector. Configura potencia 30 dBm, rota solo las antenas configuradas en `ANTENNAS_ACTIVAS` (ej. 3 y 4) cada 0,5 s y envía inventario (0x89 + 0x80/0x90). Muestra **"Tag leído: EPC=... Ant=X RSSI=X dBm"**. Útil para comprobar que el lector lee antes de la carrera.
-- **`rfid_nadadores.py`**: Registra llegadas por EPC (ignora EPCs no válidos como 000000) y **exporta en CSV** (`resultados_nadadores.csv`). Asigna la antena correcta por orden de llegada. Si existe `tags_para_registro.csv`, genera **`resultados_con_nadadores.csv`** (con nombre si hay `nombres_nadadores.csv`).
-- **`cruzar_resultados.py`**: Cruza resultados con la planilla y con `nombres_nadadores.csv` (nombres por EPC). Soporta CSV en UTF-8, cp1252 o latin-1. Normaliza EPC (espacios, prefijo 00). Salida en **CSV**.
-- **`generar_epcs.py`**: Generador de EPCs; defines distancias y femeninos/masculinos por categoría. Exporta **CSV**, **JSON**, **TXT** para el writer y **PDF** con reporte de totales. Ver **README_EPC_GENERATION.md**.
+- **`test_conexion.py`**: Prueba de conexión al lector. Rotación de antenas (0,5 s), inventario 0x89+0x80/0x90. Muestra **"Tag leído: EPC=... Ant=X RSSI=X dBm"**.
+- **`rfid_nadadores.py`**: Registra llegadas por EPC, ignora 000000, asigna antena correcta. Exporta **`resultados_nadadores.csv`**; si hay planilla, genera **`resultados_con_nadadores.csv`**.
+- **`cruzar_resultados.py`**: Cruza resultados con planilla y `nombres_nadadores.csv`. Codificaciones UTF-8/cp1252/latin-1, normaliza EPC. Genera **`resultados_con_nadadores.csv`** y llama a **`clasificacion.py`**.
+- **`clasificacion.py`**: A partir de `resultados_con_nadadores.csv` genera **`clasificacion.csv`**, **`clasificacion.xlsx`** y **`clasificacion.pdf`** (posición general, por categoría, por sexo; requiere fpdf2 y openpyxl).
+- **`generar_epcs.py`**: Generador de EPCs por categoría y género. Exporta CSV, JSON, TXT y PDF. Ver **README_EPC_GENERATION.md**.
 
 ## Hardware
 
@@ -132,7 +133,7 @@ if reader.connect():
 
 Cruza los resultados de la carrera con la planilla de EPCs y genera **`resultados_con_nadadores.csv`** con: posición, EPC, **nombre** (si existe `nombres_nadadores.csv`), número corredor, categoría, género, distancia, hora llegada, tiempo carrera, antena, rssi, edades y **`epc_en_planilla`** (sí/no).
 
-- **Planilla**: `tags_para_registro.csv` (de generar_epcs) — obligatoria para el cruce.
+- **Planilla**: `tags_para_registro.csv` (generada por `generar_epcs.py` o editada a mano). Obligatoria para el cruce. Ver más abajo **Estructura de `tags_para_registro.csv`**.
 - **Nombres**: Si existe **`nombres_nadadores.csv`** con columnas `epc` y `nombre`, se cargan los nombres y se muestra "Nombres cargados: N desde nombres_nadadores.csv". La columna **nombre** del CSV de salida se rellena por EPC. Acepta cabeceras con BOM y variantes (EPC, nombre_nadador). Los CSV pueden estar en **UTF-8, cp1252 o latin-1** (p. ej. exportados desde Excel en Windows).
 - **Normalización de EPC**: Se quitan espacios; si el EPC tiene más de 24 caracteres hex (ej. prefijo `00` en resultados del lector), se usan los últimos 24 para el cruce, así coinciden con la planilla y con `nombres_nadadores.csv`.
 - **Integrado**: Al guardar resultados, `rfid_nadadores.py` ejecuta el cruce si existe `tags_para_registro.csv`.
@@ -145,6 +146,50 @@ E2 80 07 EA 02 01 01 00 00 01 00 8C,Clara Méndez
 E28007EA020502000001008B,Camila Herrera
 ```
 EPC puede ir **con o sin espacios**; se normaliza al cruzar. Si en resultados el EPC viene con prefijo `00` (26 caracteres), se ajusta automáticamente.
+
+**Estructura de `tags_para_registro.csv`** (para cruce y planilla):
+
+Este archivo lo genera **`generar_epcs.py`** al exportar a CSV. Si lo editas a mano, debe tener **exactamente** estas columnas (el orden puede variar si usas DictReader con fieldnames; aquí el orden que usa generar_epcs):
+
+| Columna            | Descripción                                                                 | Ejemplo                    |
+|--------------------|-----------------------------------------------------------------------------|----------------------------|
+| `epc_formateado`   | EPC en hex con espacios (24 caracteres hex = 12 bytes). **Clave para el cruce.** | `E2 80 07 EA 02 01 01 00 00 01 00 8C` |
+| `numero_corredor`  | Número del corredor (entero)                                                | `1`                        |
+| `categoria_nombre` | Nombre de la categoría FECNA                                                | `Infantil A`, `Juvenil B`  |
+| `genero`           | Femenino o Masculino                                                        | `Femenino`                 |
+| `distancia`        | Distancia en metros (código o valor)                                        | `2000`, `2K`               |
+| `edad_min`         | Edad mínima de la categoría                                                 | `8`                        |
+| `edad_max`         | Edad máxima de la categoría                                                 | `9`                        |
+
+**Opcional** (si editas a mano y quieres que el nombre salga en el cruce sin usar `nombres_nadadores.csv`): puedes añadir la columna **`nombre`** o **`nombre_nadador`**; `cruzar_resultados.py` la usará para rellenar la columna nombre en `resultados_con_nadadores.csv`.
+
+- **generar_epcs** escribe solo las 7 columnas anteriores (sin nombre).
+- **cruzar_resultados** lee la planilla por **`epc_formateado`** (normalizado: sin espacios, mayúsculas; si hay más de 24 hex usa los últimos 24) y usa las columnas `numero_corredor`, `categoria_nombre`, `genero`, `distancia`, `edad_min`, `edad_max` para rellenar el CSV de salida. Si existe la columna `nombre` o `nombre_nadador` en la planilla, también la usa.
+
+**Clasificación por tiempo:** Tras el cruce, se ejecuta automáticamente **`clasificacion.py`**, que genera:
+- **`clasificacion.csv`**: misma información con **posicion_general**, **posicion_categoria** y **posicion_sexo**.
+- **`clasificacion.xlsx`**: mismo contenido en Excel (requiere `openpyxl`).
+- **`clasificacion.pdf`**: tablas en PDF con clasificación general, por categoría y por sexo (requiere `fpdf2`).
+
+También puedes ejecutar la clasificación a mano: `python clasificacion.py` (lee `resultados_con_nadadores.csv`). Para usar otro CSV: `python clasificacion.py mi_resultados.csv`.
+
+---
+
+### `clasificacion.py` – Clasificación por tiempo (general, categoría, sexo)
+
+Genera la **clasificación ordenada por tiempo de carrera** a partir de `resultados_con_nadadores.csv` (se ejecuta automáticamente al final de `cruzar_resultados.py`).
+
+**Salidas:**
+- **`clasificacion.csv`**: Una fila por participante con **posicion_general**, **posicion_categoria**, **posicion_sexo**, nombre, categoría, género, tiempo, etc.
+- **`clasificacion.xlsx`**: Mismo contenido en Excel; requiere **openpyxl** (`pip install openpyxl`).
+- **`clasificacion.pdf`**: PDF con tablas: (1) Clasificación general, (2) Por categoría, (3) Por sexo. Requiere **fpdf2** (`pip install fpdf2`).
+
+**Uso:**
+```bash
+python clasificacion.py
+# Con otro CSV de entrada:
+python clasificacion.py mi_resultados.csv
+```
 
 ---
 
@@ -175,11 +220,15 @@ Los scripts ya envían los comandos que exige el protocolo oficial del R300 YRM2
 
 ## Requisitos
 
-- **Python 3** (3.6+). Solo biblioteca estándar.
+- **Python 3** (3.6+). Casi todo el proyecto usa solo la biblioteca estándar.
+- **fpdf2** (PDF) y **openpyxl** (Excel): `pip install -r requirements.txt`.
 - PC en la misma red que el lector.
 
 ```bash
 python --version  # Verificar 3.6+
+python -m venv venv   # Opcional: entorno virtual
+# En Windows: venv\Scripts\activate   En Linux/Mac: source venv/bin/activate
+pip install -r requirements.txt  # fpdf2 (PDF), openpyxl (Excel)
 ```
 
 ---
@@ -209,8 +258,8 @@ python -m pytest tests/ -v
 3. Cierra el SDK y ejecuta `python rfid_nadadores.py`.
 4. Cuando estés listo (p. ej. al dar la salida), **pulsa Enter** para marcar el punto cero.
 5. Los nadadores pasan por las antenas; se registran posición, EPC, hora de llegada y tiempo de carrera.
-6. **Ctrl+C** para finalizar; se guarda `resultados_nadadores.csv`. Si existe `tags_para_registro.csv`, se genera también **`resultados_con_nadadores.csv`** (con nombre si existe `nombres_nadadores.csv`).
-7. Revisa los archivos. Para ver **qué nadador es** cada EPC: usa `resultados_con_nadadores.csv` (cruce con la planilla) o ejecuta `python cruzar_resultados.py` a mano.
+6. **Ctrl+C** para finalizar; se guarda `resultados_nadadores.csv`. Si existe `tags_para_registro.csv`, se genera **`resultados_con_nadadores.csv`** (con nombre si existe `nombres_nadadores.csv`).
+7. Para cruce y clasificación por tiempo: ejecuta **`python cruzar_resultados.py`**. Se generan **`resultados_con_nadadores.csv`**, **`clasificacion.csv`**, **`clasificacion.xlsx`** y **`clasificacion.pdf`** (clasificación general, por categoría y por sexo).
 
 ---
 
@@ -242,6 +291,11 @@ posicion,epc,nombre,numero_corredor,categoria_nombre,genero,distancia,hora_llega
 Con este archivo sabes **qué nadador es** cada EPC (nombre, número, categoría, género, distancia). La columna **nombre** se rellena si tienes `nombres_nadadores.csv` (epc, nombre). Si en una misma salida compites **varias distancias** (p. ej. 2K y 3K) con el **mismo punto cero**, todas las llegadas quedan en este CSV; puedes separar por carrera **filtrando por la columna `distancia`** en Excel (cada EPC ya trae su distancia en la planilla).
 
 El **tiempo de carrera** de cada nadador es el número de segundos desde el punto cero hasta la detección de su tag.
+
+**Archivos de clasificación** (tras `cruzar_resultados.py` o `python clasificacion.py`):
+- **clasificacion.csv**: Una fila por participante con **posicion_general**, **posicion_categoria**, **posicion_sexo**, nombre, categoría, género, tiempo, etc. Orden por posición general.
+- **clasificacion.xlsx**: Mismo contenido en Excel (requiere `openpyxl`). Útil para filtrar o enviar a organización.
+- **clasificacion.pdf**: Tablas listas para imprimir: clasificación general, por categoría y por sexo (requiere `fpdf2`).
 
 ---
 
@@ -288,15 +342,17 @@ El **tiempo de carrera** de cada nadador es el número de segundos desde el punt
 |--------|----------|
 | **rfid_nadadores** | `resultados_nadadores.csv` |
 | **rfid_nadadores + planilla** | `resultados_con_nadadores.csv` (EPC, nombre si hay `nombres_nadadores.csv`, número, categoría, género, distancia, tiempos, epc_en_planilla) |
-| **cruzar_resultados** | `resultados_con_nadadores.csv` (mismo; opcionalmente usa `nombres_nadadores.csv`) |
+| **cruzar_resultados** | `resultados_con_nadadores.csv` (y llama a clasificacion) |
+| **clasificacion** | `clasificacion.csv`, `clasificacion.xlsx`, `clasificacion.pdf` (clasificación por tiempo: general, por categoría, por sexo) |
 | **generar_epcs** | `tags_para_registro.csv`, `tags_completo.json`, `epcs_para_writer.txt`, `reporte_totales.pdf` (totales por categoría) |
 
 ---
 
 ## Otros programas del proyecto
 
-- **Generador de EPCs** (`generar_epcs.py`): Define hasta 4 distancias, nadadores por distancia y F/M; genera EPCs y exporta **TXT**, **CSV** y **JSON**. Ver **README_EPC_GENERATION.md**.
-- **Cruce de resultados** (`cruzar_resultados.py`): Cruce resultados de carrera con planilla de EPCs; se ejecuta solo o desde rfid_nadadores al guardar.
+- **Generador de EPCs** (`generar_epcs.py`): Define distancias y nadadores por categoría/género; exporta CSV, JSON, TXT y PDF. Ver **README_EPC_GENERATION.md**.
+- **Cruce de resultados** (`cruzar_resultados.py`): Cruce con planilla y nombres; genera `resultados_con_nadadores.csv` y dispara la clasificación.
+- **Clasificación** (`clasificacion.py`): Clasificación por tiempo (general, por categoría, por sexo); genera CSV y PDF. Se ejecuta tras el cruce o a mano.
 
 ---
 

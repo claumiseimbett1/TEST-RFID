@@ -12,9 +12,17 @@ venv/
 env/
 .env/
 
-# CSVs generados por el programa (resultados de carrera)
+# Resultados y salidas del programa
 resultados_nadadores.csv
 resultados_con_nadadores.csv
+tags_para_registro.csv
+tags_completo.json
+epcs_para_writer.txt
+reporte_totales.pdf
+nombres_nadadores.csv
+clasificacion.csv
+clasificacion.xlsx
+clasificacion.pdf
 
 # IDE / editor
 .idea/
@@ -26,6 +34,11 @@ resultados_con_nadadores.csv
 # OS
 .DS_Store
 Thumbs.db
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Logs y temporales
 *.log
