@@ -1,17 +1,33 @@
 #!/usr/bin/env python3
 """
 Cruza resultados de rfid_nadadores con la planilla de EPCs (generar_epcs).
-Genera un CSV con posición, EPC, nombre (opcional), tiempo y datos del nadador.
-Si existe nombres_nadadores.csv (columnas epc, nombre), se incluye el nombre en la salida.
+Genera un CSV con posición, EPC, nombre, categoría, género, tiempo y datos del nadador.
+Si existe nombres_nadadores.csv (columnas epc, nombre, categoria, sexo), se usa para el cruce.
 """
 import csv
 import io
 
 # Archivos por defecto
 PLANILLA_CSV = "tags_para_registro.csv"
-NOMBRES_CSV = "nombres_nadadores.csv"  # Opcional: epc, nombre (identifica nadador por EPC)
+NOMBRES_CSV = "nombres_nadadores.csv"  # Opcional: epc, nombre, categoria, sexo
 RESULTADOS_CSV = "resultados_nadadores.csv"
 SALIDA_CSV = "resultados_con_nadadores.csv"
+
+
+def _segundos_a_hhmmss(segundos) -> str:
+    """Convierte segundos (float o string numérico) a hh:mm:ss.ccc."""
+    if segundos is None or (isinstance(segundos, str) and not segundos.strip()):
+        return ""
+    try:
+        s = float(str(segundos).strip().replace(",", "."))
+    except ValueError:
+        return ""
+    if s < 0 or s != s:
+        return ""
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s % 60
+    return f"{h:02d}:{m:02d}:{sec:06.3f}"
 
 
 def _normalizar_epc(epc: str) -> str:
@@ -35,24 +51,32 @@ def _leer_archivo_texto(archivo: str) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def _cargar_nombres_por_epc(archivo: str) -> dict:
-    """Carga archivo CSV con columnas epc y nombre. Acepta BOM y variantes de nombres (EPC, nombre_nadador)."""
+def _cargar_datos_nadadores_por_epc(archivo: str) -> dict:
+    """Carga CSV con columnas epc, nombre, categoria, sexo. Acepta BOM y variantes (categoria_nombre, genero)."""
     out = {}
     try:
         contenido = _leer_archivo_texto(archivo)
         reader = csv.DictReader(io.StringIO(contenido))
         if not reader.fieldnames:
             return out
-        # Mapa nombre normalizado (sin BOM, minúsculas) -> clave real del CSV
         keys = {k.strip().lstrip("\ufeff").lower(): k for k in reader.fieldnames}
         col_epc = keys.get("epc") or keys.get("epc_formateado") or reader.fieldnames[0]
         col_nombre = keys.get("nombre") or keys.get("nombre_nadador") or (reader.fieldnames[1] if len(reader.fieldnames) > 1 else "")
+        col_categoria = keys.get("categoria") or keys.get("categoria_nombre")
+        col_sexo = keys.get("sexo") or keys.get("genero")
         for row in reader:
             epc = (row.get(col_epc) or "").strip()
-            nombre = (row.get(col_nombre) or "").strip() if col_nombre else ""
             key = _normalizar_epc(epc)
-            if key and nombre:
-                out[key] = nombre
+            if not key:
+                continue
+            nombre = (row.get(col_nombre) or "").strip() if col_nombre else ""
+            categoria = (row.get(col_categoria) or "").strip() if col_categoria else ""
+            genero = (row.get(col_sexo) or "").strip() if col_sexo else ""
+            out[key] = {
+                "nombre": nombre,
+                "categoria_nombre": categoria,
+                "genero": genero,
+            }
     except FileNotFoundError:
         pass
     return out
@@ -65,9 +89,9 @@ def cruzar_resultados(
     nombres_csv: str = NOMBRES_CSV,
 ) -> bool:
     """
-    Lee la planilla de EPCs, opcionalmente nombres_nadadores.csv (epc, nombre),
+    Lee la planilla de EPCs, opcionalmente nombres_nadadores.csv (epc, nombre, categoria, sexo),
     y los resultados de carrera; cruza por EPC y escribe resultados_con_nadadores.csv
-    con posición, EPC, nombre (si existe), número corredor, categoría, género, distancia, tiempos.
+    con posición, EPC, nombre, categoría, género (del archivo de nombres o planilla), número corredor, distancia, tiempos.
     """
     try:
         contenido = _leer_archivo_texto(planilla_csv)
@@ -78,10 +102,10 @@ def cruzar_resultados(
     except FileNotFoundError:
         return False
 
-    # Nombres por EPC (archivo opcional)
-    lookup_nombres = _cargar_nombres_por_epc(nombres_csv) if nombres_csv else {}
-    if lookup_nombres:
-        print(f"  Nombres cargados: {len(lookup_nombres)} desde {nombres_csv}")
+    # Datos por EPC: nombre, categoría, sexo (archivo opcional)
+    lookup_datos = _cargar_datos_nadadores_por_epc(nombres_csv) if nombres_csv else {}
+    if lookup_datos:
+        print(f"  Datos de cruce cargados: {len(lookup_datos)} filas desde {nombres_csv}")
 
     # Diccionario EPC normalizado -> datos del nadador (planilla)
     lookup = {}
@@ -125,7 +149,7 @@ def cruzar_resultados(
     filas_salida = []
     cabecera = [
         "posicion", "epc", "nombre", "numero_corredor", "categoria_nombre", "genero", "distancia",
-        "hora_llegada", "tiempo_carrera_s", "antena", "rssi", "edad_min", "edad_max",
+        "hora_llegada", "tiempo_carrera_s", "tiempo_carrera", "antena", "rssi", "edad_min", "edad_max",
         "epc_en_planilla"
     ]
     filas_salida.append(cabecera)
@@ -147,18 +171,25 @@ def cruzar_resultados(
         if not en_planilla and epc_key:
             epcs_no_en_planilla.append(epc.strip())
 
-        nombre = lookup_nombres.get(epc_key, nadador.get("nombre", ""))
+        # Cruce: nombre, categoría y género del archivo de nombres (epc, nombre, categoria, sexo) o de la planilla
+        datos_cruce = lookup_datos.get(epc_key, {})
+        nombre = (datos_cruce.get("nombre") or "").strip() or nadador.get("nombre", "")
+        categoria_nombre = (datos_cruce.get("categoria_nombre") or "").strip() or nadador.get("categoria_nombre", "")
+        genero = (datos_cruce.get("genero") or "").strip() or nadador.get("genero", "")
+
+        tiempo_carrera_fmt = _segundos_a_hhmmss(tiempo_carrera_s)
         validacion = "sí" if en_planilla else "no"
         filas_salida.append([
             posicion,
             epc,
             nombre,
             nadador.get("numero_corredor", ""),
-            nadador.get("categoria_nombre", ""),
-            nadador.get("genero", ""),
+            categoria_nombre,
+            genero,
             nadador.get("distancia", ""),
             hora_llegada,
             tiempo_carrera_s,
+            tiempo_carrera_fmt,
             antena,
             rssi,
             nadador.get("edad_min", ""),
@@ -185,9 +216,10 @@ def cruzar_resultados(
     try:
         from clasificacion import main as main_clasificacion
         if main_clasificacion(entrada=salida_csv):
-            print("  Clasificación (general, por categoría, por sexo): CSV y PDF generados.")
-    except Exception:
-        pass
+            print("  Clasificación (general, categoría+sexo): CSV y PDF generados.")
+    except Exception as e:
+        print(f"  ⚠ Error al generar clasificación/PDF: {e}")
+        print("     Para el PDF instala: pip install fpdf2")
 
     return True
 

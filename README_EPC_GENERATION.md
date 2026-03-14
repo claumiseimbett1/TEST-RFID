@@ -407,6 +407,8 @@ Al finalizar, el programa genera **tres archivos** en formatos adecuados:
 
 Para la **estructura exacta** del CSV y cómo editarlo a mano (p. ej. añadir columna `nombre`), ver en **README.md** la sección *Estructura de tags_para_registro.csv*.
 
+El archivo **tags_para_registro.csv** también se usa en **`generar_planilla_inscripcion.py`**: con la opción `--nombres ... --tags tags_para_registro.csv` se generan los EPC para **nombres_nadadores.csv** leyendo la columna **epc_formateado** por orden de fila (fila 1 de inscripción = fila 1 de tags). Ver **README.md** → *generar_planilla_inscripcion.py*.
+
 En modo interactivo los archivos se generan con esos nombres en el directorio actual. Al terminar se muestra la **verificación de género**: Femenino (X) + Masculino (Y) = Total ✓.
 
 ---

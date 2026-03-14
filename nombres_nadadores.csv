@@ -1,11 +1,11 @@
-epc,nombre
-E2 80 07 EA 02 01 01 00 00 01 00 8C,Clara Méndez
-E2 80 07 EA 02 02 02 00 00 01 00 8C,Sofía Ramírez
-E2 80 07 EA 02 02 02 00 00 02 00 8F,Valentina Torres
-E2 80 07 EA 02 05 02 00 00 01 00 8B,Camila Herrera
-E2 80 07 EA 02 05 02 00 00 02 00 88,Isabella Rojas
-E2 80 07 EA 02 06 01 00 00 01 00 8B,Mateo Fernández
-E2 80 07 EA 02 06 01 00 00 02 00 88,Sebastián López
-E2 80 07 EA 02 09 01 00 00 01 00 84,Andrés Castillo
-E2 80 07 EA 02 09 02 00 00 01 00 87,Daniel González
-E2 80 07 EA 02 09 02 00 00 02 00 84,Julián Martínez
+epc,nombre,categoria,genero
+E2 80 07 EA 02 01 01 00 00 01 00 8C,Claro Méndez,Junior A,Masculino
+E2 80 07 EA 02 02 02 00 00 01 00 8C,Sofía Ramírez,Infantil B,Femenino
+E2 80 07 EA 02 02 02 00 00 02 00 8F,Valentina Torres,Infantil B,Femenino
+E2 80 07 EA 02 05 02 00 00 01 00 8B,Camila Herrera,Junior A,Femenino
+E2 80 07 EA 02 05 02 00 00 02 00 88,Isabella Rojas,Junior A,Femenino
+E2 80 07 EA 02 06 01 00 00 01 00 8B,Mateo Fernández,Junior B,Masculino
+E2 80 07 EA 02 06 01 00 00 02 00 88,Sebastián López,Junior B,Masculino
+E2 80 07 EA 02 09 01 00 00 01 00 84,Andrés Castillo,Master A,Masculino
+E2 80 07 EA 02 09 02 00 00 01 00 87,Daniel González,Master A,Masculino
+E2 80 07 EA 02 09 02 00 00 02 00 84,Julián Martínez,Master A,Masculino

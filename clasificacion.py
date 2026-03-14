@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Genera clasificación por tiempo a partir de resultados_con_nadadores.csv:
-- CSV y Excel con posición general, por categoría y por sexo.
-- PDF con tablas: clasificación general, por categoría y por sexo.
+- CSV y Excel con posición general y por categoría+sexo (simultáneo).
+- PDF con tablas: clasificación general y por categoría y sexo.
 """
 import csv
 import io
@@ -26,14 +26,56 @@ def _leer_archivo_texto(archivo: str) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _pdf_safe(s: str, max_len: int = 50) -> str:
+    """Texto seguro para PDF con Helvetica (sin Unicode especial: —, acentos, etc.)."""
+    if not s:
+        return ""
+    t = str(s)[:max_len]
+    reemplazos = [
+        ("—", "-"), ("–", "-"), ("´", "'"), ("'", "'"), ("'", "'"),
+        ("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"),
+        ("Á", "A"), ("É", "E"), ("Í", "I"), ("Ó", "O"), ("Ú", "U"),
+        ("ñ", "n"), ("Ñ", "N"), ("ü", "u"), ("Ü", "U"),
+    ]
+    for a, b in reemplazos:
+        t = t.replace(a, b)
+    return "".join(c if ord(c) < 128 else "?" for c in t)
+
+
 def _parse_tiempo(s: str):
-    """Convierte tiempo_carrera_s a float; None si vacío o inválido."""
+    """Convierte tiempo_carrera_s a float (segundos); acepta número o hh:mm:ss.ccc. None si vacío o inválido."""
     if not s or not str(s).strip():
         return None
+    t = str(s).strip().replace(",", ".")
+    # Formato hh:mm:ss.ccc
+    if ":" in t:
+        parts = t.split(":")
+        if len(parts) == 3:
+            try:
+                h, m, sec = int(parts[0]), int(parts[1]), float(parts[2])
+                return h * 3600 + m * 60 + sec
+            except ValueError:
+                pass
     try:
-        return float(str(s).strip().replace(",", "."))
+        return float(t)
     except ValueError:
         return None
+
+
+def _segundos_a_hhmmss(segundos) -> str:
+    """Convierte segundos (float) a string hh:mm:ss.ccc."""
+    if segundos is None:
+        return ""
+    try:
+        s = float(segundos)
+    except (TypeError, ValueError):
+        return ""
+    if s < 0 or s != s:
+        return ""
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s % 60
+    return f"{h:02d}:{m:02d}:{sec:06.3f}"
 
 
 def cargar_resultados(ruta: str) -> list:
@@ -66,40 +108,29 @@ def _asignar_posiciones(registros: list, clave_tiempo: str = "tiempo_carrera_s")
 
 
 def calcular_clasificaciones(registros: list) -> list:
-    """Añade posicion_general, posicion_categoria, posicion_sexo a cada registro."""
-    # Copia para no mutar el original al ordenar
+    """Añade posicion_general y posicion_categoria_sexo (simultáneo categoría + sexo) a cada registro."""
     regs = [dict(r) for r in registros]
     for r in regs:
-        r["_tiempo"] = _parse_tiempo(r.get("tiempo_carrera_s", ""))
+        r["_tiempo"] = _parse_tiempo(r.get("tiempo_carrera_s") or r.get("tiempo_carrera", ""))
 
     # Clasificación general
     ordenados = sorted(regs, key=lambda r: (r["_tiempo"] is None, r["_tiempo"] if r["_tiempo"] is not None else 0))
     for i, r in enumerate(ordenados, 1):
         r["posicion_general"] = i
 
-    # Por categoría
-    categorias = {}
+    # Por categoría y sexo (simultáneo)
+    grupos = {}
     for r in regs:
         cat = (r.get("categoria_nombre") or "").strip() or "Sin categoría"
-        if cat not in categorias:
-            categorias[cat] = []
-        categorias[cat].append(r)
-    for cat, lista in categorias.items():
-        lista_sort = sorted(lista, key=lambda r: (r["_tiempo"] is None, r["_tiempo"] if r["_tiempo"] is not None else 0))
-        for i, r in enumerate(lista_sort, 1):
-            r["posicion_categoria"] = i
-
-    # Por sexo
-    por_sexo = {}
-    for r in regs:
         sexo = (r.get("genero") or "").strip() or "Sin dato"
-        if sexo not in por_sexo:
-            por_sexo[sexo] = []
-        por_sexo[sexo].append(r)
-    for sexo, lista in por_sexo.items():
+        clave = (cat, sexo)
+        if clave not in grupos:
+            grupos[clave] = []
+        grupos[clave].append(r)
+    for clave, lista in grupos.items():
         lista_sort = sorted(lista, key=lambda r: (r["_tiempo"] is None, r["_tiempo"] if r["_tiempo"] is not None else 0))
         for i, r in enumerate(lista_sort, 1):
-            r["posicion_sexo"] = i
+            r["posicion_categoria_sexo"] = i
 
     for r in regs:
         r.pop("_tiempo", None)
@@ -107,19 +138,21 @@ def calcular_clasificaciones(registros: list) -> list:
 
 
 def guardar_csv(registros: list, ruta: str) -> None:
-    """Guarda CSV con columnas de posición general, categoría, sexo y datos."""
+    """Guarda CSV con posición general, posición categoría+sexo y datos."""
     if not registros:
         return
     cabecera = [
-        "posicion_general", "posicion_categoria", "posicion_sexo",
+        "posicion_general", "posicion_categoria_sexo",
         "nombre", "numero_corredor", "categoria_nombre", "genero", "distancia",
-        "tiempo_carrera_s", "hora_llegada", "posicion", "epc", "antena", "rssi", "epc_en_planilla"
+        "tiempo_carrera", "hora_llegada", "posicion", "epc", "antena", "rssi", "epc_en_planilla"
     ]
     with open(ruta, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cabecera, extrasaction="ignore")
         w.writeheader()
         for r in registros:
-            w.writerow(r)
+            row = {k: r.get(k, "") for k in cabecera}
+            row["tiempo_carrera"] = _segundos_a_hhmmss(_parse_tiempo(r.get("tiempo_carrera_s", "")))
+            w.writerow(row)
     print(f"✓ CSV guardado: {ruta}")
 
 
@@ -134,9 +167,9 @@ def guardar_excel(registros: list, ruta: str) -> None:
     if not registros:
         return
     cabecera = [
-        "posicion_general", "posicion_categoria", "posicion_sexo",
+        "posicion_general", "posicion_categoria_sexo",
         "nombre", "numero_corredor", "categoria_nombre", "genero", "distancia",
-        "tiempo_carrera_s", "hora_llegada", "posicion", "epc", "antena", "rssi", "epc_en_planilla"
+        "tiempo_carrera", "hora_llegada", "posicion", "epc", "antena", "rssi", "epc_en_planilla"
     ]
     wb = Workbook()
     ws = wb.active
@@ -146,7 +179,8 @@ def guardar_excel(registros: list, ruta: str) -> None:
         cell.font = Font(bold=True)
     for row_idx, r in enumerate(registros, 2):
         for c, col in enumerate(cabecera, 1):
-            ws.cell(row=row_idx, column=c, value=r.get(col, ""))
+            val = _segundos_a_hhmmss(_parse_tiempo(r.get("tiempo_carrera_s", ""))) if col == "tiempo_carrera" else r.get(col, "")
+            ws.cell(row=row_idx, column=c, value=val)
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = 14
     wb.save(ruta)
@@ -154,7 +188,7 @@ def guardar_excel(registros: list, ruta: str) -> None:
 
 
 def guardar_pdf(registros: list, ruta: str) -> None:
-    """Genera PDF con clasificación general, por categoría y por sexo."""
+    """Genera PDF con clasificación general y por categoría+sexo (simultáneo)."""
     try:
         from fpdf import FPDF
     except ImportError:
@@ -164,56 +198,56 @@ def guardar_pdf(registros: list, ruta: str) -> None:
     pdf.set_auto_page_break(auto=True, margin=12)
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Clasificación por tiempo", ln=True, align="C")
+    pdf.cell(0, 10, _pdf_safe("Clasificacion por tiempo", 30), ln=True, align="C")
     pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 6, f"Total participantes: {len(registros)}", ln=True, align="C")
+    pdf.cell(0, 6, _pdf_safe(f"Total participantes: {len(registros)}", 40), ln=True, align="C")
     pdf.ln(8)
 
     def tabla(pdf, titulo: str, filas: list, columnas: list, anchos: list):
         pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(0, 7, titulo, ln=True)
+        pdf.cell(0, 7, _pdf_safe(titulo, 80), ln=True)
         pdf.set_font("Helvetica", "B", 8)
         for col, w in zip(columnas, anchos):
-            pdf.cell(w, 6, str(col)[:20], border=1)
+            pdf.cell(w, 6, _pdf_safe(str(col), 20), border=1)
         pdf.ln()
         pdf.set_font("Helvetica", "", 8)
         for row in filas:
             for k, w in zip(columnas, anchos):
-                val = str(row.get(k, ""))[:20]
+                val = _pdf_safe(row.get(k, ""), 20)
                 pdf.cell(w, 5, val, border=1)
             pdf.ln()
         pdf.ln(4)
 
     # General
-    col_gen = ["posicion_general", "nombre", "categoria_nombre", "genero", "tiempo_carrera_s"]
+    col_gen = ["posicion_general", "nombre", "categoria_nombre", "genero", "tiempo_carrera"]
     w_gen = [18, 55, 40, 28, 28]
-    tabla(pdf, "1. Clasificación general", registros, col_gen, w_gen)
+    registros_pdf = []
+    for r in registros:
+        rp = dict(r)
+        rp["tiempo_carrera"] = _segundos_a_hhmmss(_parse_tiempo(r.get("tiempo_carrera_s", "")))
+        registros_pdf.append(rp)
+    tabla(pdf, "1. Clasificacion general", registros_pdf, col_gen, w_gen)
 
-    # Por categoría
-    categorias = {}
+    # Por categoría y sexo (simultáneo)
+    grupos = {}
     for r in registros:
         cat = (r.get("categoria_nombre") or "").strip() or "Sin categoría"
-        if cat not in categorias:
-            categorias[cat] = []
-        categorias[cat].append(r)
-    for cat in sorted(categorias.keys()):
-        lista = sorted(categorias[cat], key=lambda r: r["posicion_categoria"])
-        col_cat = ["posicion_categoria", "nombre", "genero", "tiempo_carrera_s"]
-        w_cat = [22, 70, 35, 32]
-        tabla(pdf, f"2. Por categoría: {cat}", lista, col_cat, w_cat)
-
-    # Por sexo
-    por_sexo = {}
-    for r in registros:
         sexo = (r.get("genero") or "").strip() or "Sin dato"
-        if sexo not in por_sexo:
-            por_sexo[sexo] = []
-        por_sexo[sexo].append(r)
-    for sexo in sorted(por_sexo.keys()):
-        lista = sorted(por_sexo[sexo], key=lambda r: r["posicion_sexo"])
-        col_sex = ["posicion_sexo", "nombre", "categoria_nombre", "tiempo_carrera_s"]
-        w_sex = [22, 70, 50, 35]
-        tabla(pdf, f"3. Por sexo: {sexo}", lista, col_sex, w_sex)
+        clave = (cat, sexo)
+        if clave not in grupos:
+            grupos[clave] = []
+        grupos[clave].append(r)
+    col_cs = ["posicion_categoria_sexo", "nombre", "tiempo_carrera"]
+    w_cs = [28, 85, 40]
+    for (cat, sexo) in sorted(grupos.keys()):
+        lista = sorted(grupos[(cat, sexo)], key=lambda r: r["posicion_categoria_sexo"])
+        lista_pdf = []
+        for r in lista:
+            rp = dict(r)
+            rp["tiempo_carrera"] = _segundos_a_hhmmss(_parse_tiempo(r.get("tiempo_carrera_s", "")))
+            lista_pdf.append(rp)
+        titulo = f"2. Categoria y sexo: {cat} - {sexo}"
+        tabla(pdf, titulo, lista_pdf, col_cs, w_cs)
 
     pdf.output(ruta)
     print(f"✓ PDF guardado: {ruta}")
